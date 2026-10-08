@@ -1,12 +1,13 @@
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Body, Button, H1, H2, Input, Row, Screen, useToast } from '@/components/ui';
+import { Button, Header, Input, Screen, useToast } from '@/components/ui';
 import { updateProfile } from '@/lib/api';
 import { useSession } from '@/lib/session';
-import { colors } from '@/lib/theme';
+import { GUTTER, colors, radius, type } from '@/lib/theme';
+import { goBack } from '@/lib/nav';
 import { refreshWidgets } from '@/widgets/task-handler';
 
 const MOODS: { group: string; items: [string, string][] }[] = [
@@ -43,6 +44,9 @@ export default function MoodScreen() {
   const [emoji, setEmoji] = useState<string | null>(profile?.mood_emoji ?? null);
   const [text, setText] = useState(profile?.mood_text ?? '');
   const [saving, setSaving] = useState(false);
+  const insets = useSafeAreaInsets();
+  // Exact cell size: percentage widths + aspectRatio inside a wrapping row mis-measure on Android.
+  const cell = Math.floor((useWindowDimensions().width - GUTTER * 2 - 8 * 3) / 4);
 
   const save = async (clear = false) => {
     if (!userId) return;
@@ -56,7 +60,7 @@ export default function MoodScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       await refresh();
       refreshWidgets(['Mood']);
-      router.back();
+      goBack();
     } catch (e) {
       toast("Couldn't save", e instanceof Error ? e.message : undefined);
     } finally {
@@ -65,42 +69,63 @@ export default function MoodScreen() {
   };
 
   return (
-    <Screen>
-      <H1>How are you feeling?</H1>
-      {MOODS.map((g) => (
-        <View key={g.group} style={{ gap: 8 }}>
-          <H2 style={{ fontSize: 20, color: colors.textDim }}>{g.group}</H2>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {g.items.map(([e, label]) => (
-              <Pressable
-                key={label}
-                onPress={() => {
-                  setEmoji(e);
-                  if (!text || MOODS.some((m) => m.items.some(([, l]) => l === text))) setText(label);
-                }}
-                style={{
-                  width: 74,
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  borderRadius: 14,
-                  backgroundColor: emoji === e ? colors.pink + '55' : colors.card,
-                }}
-              >
-                <Text style={{ fontSize: 28 }}>{e}</Text>
-                <Text style={{ color: colors.textDim, fontSize: 11 }} numberOfLines={1}>
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </Row>
-        </View>
-      ))}
-      <Input placeholder="Add a status (optional)" value={text} onChangeText={setText} maxLength={80} />
-      <Body dim>Your people see this on their Mood widget and get a little notification.</Body>
-      <Row>
-        <Button variant="ghost" title="Clear mood" onPress={() => save(true)} style={{ flex: 1 }} />
-        <Button title="Share mood" disabled={!emoji} loading={saving} onPress={() => save()} style={{ flex: 1 }} />
-      </Row>
-    </Screen>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior="height">
+      <Screen padTop>
+        <Header
+          title="How are you feeling?"
+          onBack={goBack}
+          right={profile?.mood_emoji ? <Button variant="ghost" title="Clear" onPress={() => save(true)} style={{ paddingHorizontal: 8 }} /> : null}
+        />
+        {MOODS.map((g) => (
+          <View key={g.group} style={{ gap: 10 }}>
+            <Text style={styles.group}>{g.group}</Text>
+            <View style={styles.grid}>
+              {g.items.map(([e, label]) => {
+                const on = emoji === e;
+                return (
+                  <Pressable
+                    key={label}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={label}
+                    onPress={() => {
+                      setEmoji(e);
+                      // Replace the status only if it was a preset label (don't clobber what they typed).
+                      if (!text || MOODS.some((m) => m.items.some(([, l]) => l === text))) setText(label);
+                    }}
+                    style={[styles.cell, { width: cell, height: cell }, on && styles.cellOn]}
+                  >
+                    <Text style={{ fontSize: 30 }}>{e}</Text>
+                    <Text style={[type.micro, on && { color: colors.text }]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </Screen>
+      <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
+        <Input placeholder="Add a status (optional)" value={text} onChangeText={setText} maxLength={80} style={{ flex: 1 }} />
+        <Button title="Share" disabled={!emoji} loading={saving} onPress={() => save()} />
+      </View>
+    </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  group: { ...type.micro, textTransform: 'uppercase', letterSpacing: 0.8, marginLeft: 2, marginTop: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8 },
+  cell: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  cellOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, paddingTop: 12, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.line },
+});

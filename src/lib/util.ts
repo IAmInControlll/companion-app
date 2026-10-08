@@ -10,6 +10,33 @@ export function timeAgo(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** "Just now", "12m ago", "Today, 21:14", "Yesterday, 08:02", "5 Oct", "5 Oct 2025". */
+export function formatWhen(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const s = (now.getTime() - d.getTime()) / 1000;
+  if (s < 60) return 'Just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  if (sameDay(d, now)) return `Today, ${time}`;
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (sameDay(d, y)) return `Yesterday, ${time}`;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
+}
+
+/** Section title for grouping by day: "Today", "Yesterday", "Saturday", "5 Oct". */
+export function dayLabel(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (sameDay(d, now)) return 'Today';
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (sameDay(d, y)) return 'Yesterday';
+  if (now.getTime() - d.getTime() < 6 * 86400000) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
+}
+
 /** Great-circle distance in km. */
 export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;

@@ -2,17 +2,19 @@ import type { SkImage } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { Avatar, Body, Button, H2, IconButton, Loading, Row, Screen, useToast } from '@/components/ui';
+import { postBackground } from '@/components/BoardStage';
+import { Avatar, Body, Button, H2, Header, IconButton, Loading, Row, Screen, useToast } from '@/components/ui';
 import { DocView } from '@/drawing/DrawingCanvas';
 import { useHandTypeface } from '@/drawing/fonts';
 import type { Doc } from '@/drawing/model';
 import { deletePost, getPost, react, unreact, type PostWithReactions } from '@/lib/api';
 import { loadJson, loadSkImage, signedUrl } from '@/lib/media';
 import { useSession } from '@/lib/session';
-import { colors, radius } from '@/lib/theme';
-import { timeAgo } from '@/lib/util';
+import { GUTTER, colors, radius, type } from '@/lib/theme';
+import { formatWhen } from '@/lib/util';
+import { goBack } from '@/lib/nav';
 
 const REACTIONS = ['❤️', '😍', '😂', '🥺', '🔥', '👏'];
 
@@ -73,8 +75,9 @@ export default function PostScreen() {
   if (post === null) {
     return (
       <Screen>
-        <H2>This board was wiped 🧽</H2>
-        <Button title="Back" onPress={() => router.back()} />
+        <Header title="" />
+        <H2>This one’s been deleted</H2>
+        <Body dim>Whoever sent it took it down.</Body>
       </Screen>
     );
   }
@@ -83,7 +86,7 @@ export default function PostScreen() {
   const author = space?.members.find((m) => m.user_id === post.author_id)?.profile;
   const mine = post.author_id === userId;
   const myReaction = post.reactions.find((r) => r.user_id === userId)?.emoji;
-  const W = width - 32;
+  const W = width - GUTTER * 2;
 
   const toggleReaction = async (emoji: string) => {
     if (!userId) return;
@@ -105,7 +108,7 @@ export default function PostScreen() {
         onPress: async () => {
           try {
             await deletePost(post.id);
-            router.back();
+            goBack();
           } catch (e) {
             toast("Couldn't delete it", e instanceof Error ? e.message : undefined);
           }
@@ -113,54 +116,83 @@ export default function PostScreen() {
       },
     ]);
 
+  const reactionSummary = post.reactions
+    .filter((r) => r.user_id !== userId)
+    .map((r) => `${space?.members.find((m) => m.user_id === r.user_id)?.profile.display_name ?? 'Someone'} ${r.emoji}`)
+    .join('  ·  ');
+
   return (
     <Screen>
-      <Row>
-        <IconButton icon="←" label="Back" onPress={() => router.back()} />
+      <View style={styles.header}>
+        <IconButton icon="arrow_back" label="Back" variant="plain" onPress={goBack} style={{ marginLeft: -10 }} />
         {author ? <Avatar emoji={author.avatar} color={author.color} size={36} /> : null}
         <View style={{ flex: 1 }}>
-          <H2>{author?.display_name ?? 'Someone'}</H2>
-          <Body dim>{timeAgo(post.created_at)}</Body>
+          <Text style={type.headline} numberOfLines={1}>
+            {mine ? 'You' : (author?.display_name ?? 'Someone')}
+          </Text>
+          <Text style={type.caption}>{formatWhen(post.created_at)}</Text>
         </View>
-        {mine ? <IconButton icon="🗑️" label="Delete" onPress={remove} /> : null}
-      </Row>
+        {mine ? <IconButton icon="delete" label="Delete" variant="plain" color={colors.textDim} onPress={remove} /> : null}
+      </View>
 
-      {progress !== null && doc ? (
-        <DocView doc={doc} env={{ typeface, bgImage: bg }} width={W} progress={progress} />
-      ) : url ? (
-        <Image source={{ uri: url }} style={{ width: W, aspectRatio: post.aspect, borderRadius: radius.md }} contentFit="cover" />
-      ) : (
-        <View style={{ width: W, aspectRatio: post.aspect }} />
-      )}
+      <View style={[styles.board, { width: W, aspectRatio: post.aspect, backgroundColor: postBackground(post) }]}>
+        {progress !== null && doc ? (
+          <DocView doc={doc} env={{ typeface, bgImage: bg }} width={W} progress={progress} />
+        ) : url ? (
+          <Image source={{ uri: url }} style={{ flex: 1 }} contentFit="contain" transition={150} />
+        ) : null}
+      </View>
 
       {post.body && post.kind === 'photo' ? <Body>{post.body}</Body> : null}
 
-      <Row style={{ justifyContent: 'space-between' }}>
-        {REACTIONS.map((e) => {
-          const count = post.reactions.filter((r) => r.emoji === e).length;
-          return (
-            <Pressable
-              key={e}
-              onPress={() => toggleReaction(e)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 18,
-                backgroundColor: myReaction === e ? colors.pink + '55' : colors.card,
-              }}
-            >
-              <Text style={{ fontSize: 22 }}>
-                {e}
-                {count > 1 ? <Text style={{ fontSize: 13, color: colors.text }}> {count}</Text> : null}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </Row>
+      {mine ? (
+        reactionSummary ? <Text style={[type.body, { color: colors.textDim }]}>{reactionSummary}</Text> : null
+      ) : (
+        <View style={styles.reactions} accessibilityRole="radiogroup" accessibilityLabel="React">
+          {REACTIONS.map((e) => {
+            const on = myReaction === e;
+            return (
+              <Pressable
+                key={e}
+                onPress={() => toggleReaction(e)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`React ${e}`}
+                style={[styles.reaction, on && { backgroundColor: colors.accentSoft }]}
+              >
+                <Text style={{ fontSize: 24, opacity: myReaction && !on ? 0.5 : 1 }}>{e}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
-      {doc ? <Button variant="secondary" icon="▶️" title={progress !== null && progress < 1 ? 'Replaying…' : 'Watch it being drawn'} onPress={replay} /> : null}
-      <Button icon="🖍️" title={post.kind === 'photo' ? 'Doodle on this photo' : 'Draw on their board'} onPress={() => router.push(`/draw?over=${post.id}&space=${post.space_id}`)} />
-      <Button variant="ghost" icon="✏️" title="Reply with a fresh board" onPress={() => router.push(`/draw?space=${post.space_id}`)} />
+      <Row gap={10}>
+        {doc && mine ? (
+          // Your own post: replay is the only action, so give it words.
+          <Button variant="secondary" icon="replay" title={progress !== null && progress < 1 ? 'Replaying…' : 'Watch it being drawn'} onPress={replay} style={{ flex: 1 }} />
+        ) : doc ? (
+          <IconButton icon="replay" label={progress !== null && progress < 1 ? 'Replaying' : 'Watch it being drawn'} size={52} onPress={replay} />
+        ) : null}
+        {mine ? null : (
+          <>
+            <Button variant="secondary" icon="reply" title="Reply" onPress={() => router.push(`/draw?space=${post.space_id}`)} style={{ flex: 1 }} />
+            <Button
+              icon="draw"
+              title={post.kind === 'photo' ? 'Doodle on it' : 'Draw on it'}
+              onPress={() => router.push(`/draw?over=${post.id}&space=${post.space_id}`)}
+              style={{ flex: 1 }}
+            />
+          </>
+        )}
+      </Row>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52 },
+  board: { borderRadius: radius.board, overflow: 'hidden', alignSelf: 'center' },
+  reactions: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: radius.pill, padding: 6 },
+  reaction: { width: 48, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+});

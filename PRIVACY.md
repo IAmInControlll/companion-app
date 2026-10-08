@@ -32,4 +32,4 @@ Chalkmates is not meant for children under 13.
 
 ## Contact
 
-Questions or requests: [contact email]
+Questions or requests: iamincontrol.dev@gmail.com

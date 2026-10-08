@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { BackHandler, KeyboardAvoidingView, Text, View, useWindowDimensions } from 'react-native';
+import { BackHandler, KeyboardAvoidingView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { ChalkTitle } from '@/components/ChalkTitle';
 import { Body, Button, IconButton, Input, PasswordInput, Screen } from '@/components/ui';
@@ -8,7 +8,7 @@ import { DocView } from '@/drawing/DrawingCanvas';
 import { useHandTypeface } from '@/drawing/fonts';
 import type { Doc } from '@/drawing/model';
 import { supabase } from '@/lib/supabase';
-import { HAND_FONT, colors } from '@/lib/theme';
+import { colors, radius, type } from '@/lib/theme';
 
 type Mode = 'welcome' | 'sign-in' | 'sign-up' | 'reset';
 
@@ -16,6 +16,7 @@ type Mode = 'welcome' | 'sign-in' | 'sign-up' | 'reset';
 const HERO: Doc = {
   v: 1,
   board: 'classic',
+  style: { frame: 'none' },
   aspect: 1.6,
   items: [
     { t: 'text', id: 't', text: 'thinking of you', color: '#F4F1E8', x: 0.5, y: 0.27, size: 0.1, rot: -3, seed: 4 },
@@ -116,12 +117,12 @@ export default function SignIn() {
           <Body dim style={{ textAlign: 'center' }}>
             Draw on each other’s home screens.{'\n'}Free, forever.
           </Body>
-          <View style={{ marginVertical: 24 }}>
-            <DocView doc={HERO} env={env} width={Math.min(width - 48, 360)} />
+          <View style={{ marginVertical: 24, borderRadius: radius.board, overflow: 'hidden' }}>
+            <DocView doc={HERO} env={env} width={Math.min(width - 40, 380)} />
           </View>
         </View>
-        <Button title="Log in" onPress={() => go('sign-in')} />
-        <Button variant="ghost" title="Register" onPress={() => go('sign-up')} />
+        <Button title="Create an account" onPress={() => go('sign-up')} />
+        <Button variant="ghost" title="I already have an account" onPress={() => go('sign-in')} />
       </Screen>
     );
   }
@@ -130,9 +131,9 @@ export default function SignIn() {
     return (
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
         <Screen style={{ flexGrow: 1 }}>
-          <IconButton icon="←" label="Back" onPress={() => go('sign-in')} />
+          <IconButton icon="arrow_back" label="Back" variant="plain" onPress={() => go('sign-in')} style={{ marginLeft: -10 }} />
           <View style={{ gap: 4, marginVertical: 12 }}>
-            <Text style={{ fontFamily: HAND_FONT, fontSize: 38, color: colors.text }}>Reset password</Text>
+            <Text style={[type.title, { fontSize: 30, lineHeight: 36 }]}>Reset password</Text>
             <Body dim>{codeSent ? `We emailed a code to ${email.trim()}.` : 'We’ll email you a code to set a new one.'}</Body>
           </View>
           <Input
@@ -163,9 +164,9 @@ export default function SignIn() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
       <Screen style={{ flexGrow: 1 }}>
-        <IconButton icon="←" label="Back" onPress={() => go('welcome')} />
+        <IconButton icon="arrow_back" label="Back" variant="plain" onPress={() => go('welcome')} style={{ marginLeft: -10 }} />
         <View style={{ gap: 4, marginVertical: 12 }}>
-          <Text style={{ fontFamily: HAND_FONT, fontSize: 38, color: colors.text }}>{signUp ? 'Make an account' : 'Welcome back'}</Text>
+          <Text style={[type.title, { fontSize: 30, lineHeight: 36 }]}>{signUp ? 'Create your account' : 'Welcome back'}</Text>
           <Body dim>{signUp ? 'Takes ten seconds. No card, no catch.' : 'Log in to see what they drew.'}</Body>
         </View>
 
@@ -180,25 +181,34 @@ export default function SignIn() {
           autoFocus={!signUp}
         />
         <PasswordInput
-          placeholder="Password"
+          placeholder={signUp ? 'Password (6+ characters)' : 'Password'}
           value={password}
           onChangeText={setPassword}
           autoComplete={signUp ? 'new-password' : 'current-password'}
           onSubmitEditing={submit}
         />
-        {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
+        {signUp ? null : (
+          <Text onPress={() => go('reset')} accessibilityRole="button" style={[type.label, styles.forgot]}>
+            Forgot password?
+          </Text>
+        )}
+        {error ? <Text style={[type.body, { color: colors.danger }]}>{error}</Text> : null}
 
-        <Button title={signUp ? 'Register' : 'Log in'} onPress={submit} loading={busy} />
+        <Button title={signUp ? 'Create account' : 'Log in'} onPress={submit} loading={busy} />
         <Button
           variant="ghost"
-          title={signUp ? 'I already have an account' : 'New here? Register'}
+          title={signUp ? 'I already have an account' : 'New here? Create an account'}
           onPress={() => go(signUp ? 'sign-in' : 'sign-up')}
         />
-        {signUp ? null : <Button variant="ghost" title="Forgot password?" onPress={() => go('reset')} />}
-        <Text onPress={() => router.push('/privacy')} style={{ color: colors.textDim, textAlign: 'center', textDecorationLine: 'underline' }}>
+        <View style={{ flex: 1 }} />
+        <Text onPress={() => router.push('/privacy')} accessibilityRole="link" style={[type.caption, { textAlign: 'center', textDecorationLine: 'underline' }]}>
           Privacy policy
         </Text>
       </Screen>
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  forgot: { alignSelf: 'flex-end', color: colors.textDim, fontSize: 14, paddingVertical: 4 },
+});

@@ -9,6 +9,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector, type GestureTouchEvent } from 'react-native-gesture-handler';
 
+import { Icon } from '@/components/ui';
+import { colors } from '@/lib/theme';
+
 import { compactPoints, randomSeed, uid, type BrushId, type Doc, type PlacedItem, type Stroke } from './model';
 import { drawDoc, hitTest, measureText, renderItemsLayer, type RenderEnv } from './render';
 import type { DrawingDocApi } from './useDrawingDoc';
@@ -472,37 +475,42 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
           </Canvas>
         </View>
       </GestureDetector>
-      <View style={styles.zoom} pointerEvents="box-none">
-        {zoomed && tool.mode === 'draw' ? (
-          <Pressable
-            onPress={() => setHandPan((p) => !p)}
-            style={[styles.zoomBtn, panning && styles.handActive]}
-            accessibilityLabel={panning ? 'Stop panning, draw again' : 'Pan with one finger'}
-            accessibilityState={{ selected: panning }}
-          >
-            <Text style={styles.handText}>✋</Text>
+      {/* Zoom controls only while zoomed in; pinch is how you get there. */}
+      {zoomed ? (
+        <View style={styles.zoom} pointerEvents="box-none">
+          {tool.mode === 'draw' ? (
+            <Pressable
+              onPress={() => setHandPan((p) => !p)}
+              style={[styles.zoomBtn, panning && styles.handActive]}
+              accessibilityLabel={panning ? 'Stop panning, draw again' : 'Pan with one finger'}
+              accessibilityState={{ selected: panning }}
+            >
+              <Icon name="pan_tool" size={16} color={panning ? colors.onAccent : '#FFFFFF'} />
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => zoomBy(1 / 1.5)} style={styles.zoomBtn} accessibilityLabel="Zoom out">
+            <Icon name="remove" size={18} color="#FFFFFF" />
           </Pressable>
-        ) : null}
-        <Pressable onPress={() => zoomBy(1 / 1.5)} disabled={!zoomed} style={styles.zoomBtn} accessibilityLabel="Zoom out">
-          <Text style={[styles.zoomText, !zoomed && { opacity: 0.35 }]}>−</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            cancelFling();
-            commitView(IDENTITY);
-          }}
-          style={styles.zoomPct}
-          accessibilityLabel="Reset zoom"
-        >
-          <Text style={styles.zoomPctText}>{zoomPct}%</Text>
-        </Pressable>
-        <Pressable onPress={() => zoomBy(1.5)} disabled={view.s >= MAX_ZOOM} style={styles.zoomBtn} accessibilityLabel="Zoom in">
-          <Text style={[styles.zoomText, view.s >= MAX_ZOOM && { opacity: 0.35 }]}>+</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={() => {
+              cancelFling();
+              commitView(IDENTITY);
+            }}
+            style={styles.zoomPct}
+            accessibilityLabel="Reset zoom"
+          >
+            <Text style={styles.zoomPctText}>{zoomPct}%</Text>
+          </Pressable>
+          <Pressable onPress={() => zoomBy(1.5)} disabled={view.s >= MAX_ZOOM} style={styles.zoomBtn} accessibilityLabel="Zoom in">
+            <View collapsable={false} style={{ opacity: view.s >= MAX_ZOOM ? 0.35 : 1 }}>
+              <Icon name="add" size={18} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
       {panning ? (
         <View style={styles.panBadge} pointerEvents="none">
-          <Text style={styles.panBadgeText}>Panning: tap ✋ to draw again</Text>
+          <Text style={styles.panBadgeText}>Panning · tap the hand to draw again</Text>
         </View>
       ) : null}
     </View>
@@ -576,11 +584,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   zoomBtn: { width: 32, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
-  zoomText: { color: '#FFFFFF', fontSize: 20, lineHeight: 22 },
   zoomPct: { paddingHorizontal: 4, height: 30, justifyContent: 'center' },
   zoomPctText: { color: '#FFFFFF', fontSize: 12, fontVariant: ['tabular-nums'] },
-  handActive: { backgroundColor: '#F7A8C4' },
-  handText: { fontSize: 15 },
+  handActive: { backgroundColor: colors.accent },
   panBadge: {
     position: 'absolute',
     bottom: 14,

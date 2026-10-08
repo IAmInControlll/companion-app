@@ -16,7 +16,7 @@ export function Slider({
   max,
   onChange,
   log = false,
-  color = colors.pink,
+  color = colors.accent,
 }: {
   value: number;
   min: number;
@@ -42,7 +42,7 @@ export function Slider({
   return (
     <GestureDetector gesture={gesture}>
       <View style={{ height: 40, justifyContent: 'center', flex: 1 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.border, marginHorizontal: THUMB / 2 }}>
+        <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.line, marginHorizontal: THUMB / 2 }}>
           <View style={{ width: t * track, height: 4, borderRadius: 2, backgroundColor: color }} />
         </View>
         <View

@@ -1,3 +1,4 @@
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -7,6 +8,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Body, Button, H2, ToastProvider, useToast } from '@/components/ui';
+import { FONT_SOURCES } from '@/lib/fonts';
+import { useLocationSync } from '@/lib/location';
 import { listenForForegroundMessages } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
 import { colors } from '@/lib/theme';
@@ -29,11 +32,15 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { ready, userId, spaces, spacesLoaded, loadFailed } = useSession();
+  const { ready, userId, profile, spaces, spacesLoaded, loadFailed } = useSession();
   const toast = useToast();
+  // A missing font shouldn't brick the app: carry on (with fallbacks) if loading fails.
+  const [fontsLoaded, fontError] = useFonts(FONT_SOURCES);
   const signedIn = !!userId;
   const hasSpace = spaces.length > 0;
-  const loading = !ready || (signedIn && !spacesLoaded && !loadFailed);
+  const loading = !ready || (!fontsLoaded && !fontError) || (signedIn && !spacesLoaded && !loadFailed);
+
+  useLocationSync(signedIn && hasSpace && !!profile?.share_location);
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync().catch(() => {});
@@ -45,7 +52,7 @@ function RootStack() {
   if (signedIn && loadFailed) return <Offline />;
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade_from_bottom' }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'ios_from_right' }}>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
@@ -54,7 +61,10 @@ function RootStack() {
         <Stack.Screen name="onboarding" />
       </Stack.Protected>
       <Stack.Protected guard={signedIn && hasSpace}>
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="history" />
+        <Stack.Screen name="together" />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="draw" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="note" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="photo" options={{ animation: 'slide_from_bottom' }} />

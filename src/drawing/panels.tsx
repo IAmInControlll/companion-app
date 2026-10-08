@@ -1,13 +1,12 @@
 import { Canvas, Picture, createPicture } from '@shopify/react-native-skia';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ColorPicker, RainbowSwatch, SectionLabel, SwatchButton, useRecentColors } from '@/components/ColorPicker';
 import { Slider } from '@/components/Slider';
-import { Button, Chip, Row } from '@/components/ui';
-import { HAND_FONT, colors } from '@/lib/theme';
+import { Button, Chip, Row, Sheet, type IconName } from '@/components/ui';
+import { HAND_FONT, colors, type } from '@/lib/theme';
 
 import {
   ASPECTS,
@@ -35,40 +34,25 @@ export const MAX_SIZE = 0.15;
 // Inline toolbars
 // ---------------------------------------------------------------------------
 
-export function BrushBar({
-  brush,
-  mode,
-  onBrush,
-  onMove,
-  onText,
-  onStamps,
-}: {
-  brush: BrushId;
-  mode: 'draw' | 'move';
-  onBrush: (b: BrushId) => void;
-  onMove: () => void;
-  onText: () => void;
-  onStamps: () => void;
-}) {
+/** Icon for each brush (Material Symbols). */
+export const BRUSH_ICONS: Record<BrushId, IconName> = {
+  chalk: 'gesture',
+  pen: 'stylus_pen',
+  neon: 'auto_awesome',
+  highlighter: 'stylus_highlighter',
+  spray: 'brush',
+  rainbow: 'palette',
+  eraser: 'ink_eraser',
+};
+
+/** Brush picker shown in the composer's tray (the eraser has its own dock button). */
+export function BrushTray({ brush, onBrush }: { brush: BrushId; onBrush: (b: BrushId) => void }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.barContent}>
-      {BRUSHES.map((b) => (
-        <ToolButton key={b.id} icon={b.icon} label={b.label} active={mode === 'draw' && brush === b.id} onPress={() => onBrush(b.id)} />
+      {BRUSHES.filter((b) => b.id !== 'eraser').map((b) => (
+        <Chip key={b.id} icon={BRUSH_ICONS[b.id]} label={b.label} active={brush === b.id} onPress={() => onBrush(b.id)} />
       ))}
-      <View style={styles.divider} />
-      <ToolButton icon="Aa" label="Text" onPress={onText} />
-      <ToolButton icon="⭐" label="Stamps" onPress={onStamps} />
-      <ToolButton icon="✋" label="Move" active={mode === 'move'} onPress={onMove} />
     </ScrollView>
-  );
-}
-
-function ToolButton({ icon, label, active, onPress }: { icon: string; label: string; active?: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.tool, active && styles.toolActive]} accessibilityLabel={label}>
-      <Text style={[styles.toolIcon, icon === 'Aa' && { fontFamily: HAND_FONT, color: active ? '#3A1F2C' : colors.text }]}>{icon}</Text>
-      <Text style={[styles.toolLabel, active && { color: '#3A1F2C' }]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -122,7 +106,7 @@ export function SizeBar({ size, color, onSize }: { size: number; color: string; 
         const d = 5 + i * 3.5;
         const active = Math.abs(s - size) < 1e-4;
         return (
-          <Pressable key={s} onPress={() => onSize(s)} style={[styles.sizeBtn, active && { backgroundColor: colors.cardHi }]} accessibilityLabel={`Size ${i + 1}`}>
+          <Pressable key={s} onPress={() => onSize(s)} style={[styles.sizeBtn, active && { backgroundColor: colors.surfaceHi }]} accessibilityLabel={`Size ${i + 1}`}>
             <View style={{ width: d, height: d, borderRadius: d / 2, backgroundColor: active ? color : colors.textDim }} />
           </Pressable>
         );
@@ -136,24 +120,6 @@ export function SizeBar({ size, color, onSize }: { size: number; color: string; 
 // Sheets
 // ---------------------------------------------------------------------------
 
-function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  const insets = useSafeAreaInsets();
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      {/* Modals render outside the app root on Android, so gestures need their own root. */}
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.grabber} />
-          <Text style={styles.sheetTitle}>{title}</Text>
-          <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled">
-            {children}
-          </ScrollView>
-        </View>
-      </GestureHandlerRootView>
-    </Modal>
-  );
-}
 
 export function ColorSheet({ visible, initial, onClose, onDone }: { visible: boolean; initial: string; onClose: () => void; onDone: (hex: string) => void }) {
   const { width } = useWindowDimensions();
@@ -201,6 +167,9 @@ export function BoardSheet({
   onAspect,
   onClear,
   canClear,
+  hasPhoto,
+  onPhoto,
+  onRemovePhoto,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -212,6 +181,10 @@ export function BoardSheet({
   onAspect: (a: number) => void;
   onClear: () => void;
   canClear: boolean;
+  /** The canvas is a photo picked on this phone. */
+  hasPhoto?: boolean;
+  onPhoto?: () => void;
+  onRemovePhoto?: () => void;
 }) {
   const { width } = useWindowDimensions();
   const { recent, addRecent } = useRecentColors();
@@ -222,10 +195,20 @@ export function BoardSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Board">
+      {onPhoto ? (
+        hasPhoto ? (
+          <Row gap={10}>
+            <Button variant="secondary" icon="add_photo_alternate" title="Change photo" onPress={onPhoto} style={{ flex: 1 }} />
+            <Button variant="secondary" icon="close" title="Remove" onPress={onRemovePhoto} style={{ flex: 1 }} />
+          </Row>
+        ) : (
+          <Button variant="secondary" icon="add_photo_alternate" title="Draw on a photo" onPress={onPhoto} />
+        )
+      ) : null}
       <SectionLabel>Presets</SectionLabel>
       <View style={styles.grid}>
         {BOARD_IDS.map((id) => (
-          <Pressable key={id} onPress={() => onBoard(id)} style={[styles.boardTile, board === id && !style && { borderColor: colors.pink }]}>
+          <Pressable key={id} onPress={() => onBoard(id)} style={[styles.boardTile, board === id && !style?.base && { borderColor: colors.accent }]}>
             <BoardPreview board={id} />
             <Text style={styles.tileLabel}>{BOARDS[id].name}</Text>
           </Pressable>
@@ -268,14 +251,14 @@ export function BoardSheet({
           <Chip key={a.id} label={a.label} active={Math.abs(aspect - a.value) < 0.01} onPress={() => onAspect(a.value)} />
         ))}
       </Row>
-      <Button variant="danger" title="Wipe the board" icon="🧽" disabled={!canClear} onPress={onClear} style={{ marginTop: 4 }} />
+      <Button variant="danger" title="Wipe the board" icon="delete" disabled={!canClear} onPress={onClear} style={{ marginTop: 4 }} />
     </Sheet>
   );
 }
 
 function FrameChip({ id, label, color, active, onPress }: { id: FrameId; label: string; color: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.frameChip, active && { borderColor: colors.pink, backgroundColor: colors.cardHi }]}>
+    <Pressable onPress={onPress} style={[styles.frameChip, active && { borderColor: colors.accent, backgroundColor: colors.surfaceHi }]}>
       <View
         style={{
           width: 22,
@@ -312,7 +295,6 @@ export function StampSheet({ visible, onClose, color, dark, onPick }: { visible:
           </Pressable>
         ))}
       </View>
-      <Text style={styles.sheetSub}>Tip: switch to ✋ Move to drag, pinch and twist stamps.</Text>
     </Sheet>
   );
 }
@@ -370,26 +352,17 @@ export function TextSheet({
 }
 
 const styles = StyleSheet.create({
-  barContent: { paddingHorizontal: 12, gap: 6, alignItems: 'center' },
-  divider: { width: 1, height: 32, backgroundColor: colors.border, marginHorizontal: 4 },
-  tool: { width: 58, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
-  toolActive: { backgroundColor: colors.pink },
-  toolIcon: { fontSize: 20, color: colors.text },
-  toolLabel: { fontSize: 11, color: colors.textDim, marginTop: 2 },
+  barContent: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
+  divider: { width: 1, height: 32, backgroundColor: colors.line, marginHorizontal: 4 },
   swatchRing: { width: 38, height: 38, borderRadius: 19, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   customDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFFFFF' },
   sizeBtn: { width: 30, height: 36, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: '#00000066' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, gap: 12 },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border },
-  sheetTitle: { fontFamily: HAND_FONT, fontSize: 26, color: colors.text },
-  sheetSub: { color: colors.textDim, fontSize: 14 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   boardTile: { alignItems: 'center', gap: 4, padding: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
   tileLabel: { color: colors.textDim, fontSize: 12 },
-  frameChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
-  frameLabel: { fontFamily: HAND_FONT, fontSize: 17, color: colors.text },
-  stampTile: { width: 68, height: 68, borderRadius: 14, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
-  textModal: { flex: 1, backgroundColor: '#000000CC', padding: 16, gap: 12 },
+  frameChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.line },
+  frameLabel: type.label,
+  stampTile: { width: 68, height: 68, borderRadius: 16, backgroundColor: colors.surfaceHi, alignItems: 'center', justifyContent: 'center' },
+  textModal: { flex: 1, backgroundColor: colors.scrim, padding: 20, gap: 12 },
   textInput: { fontFamily: HAND_FONT, fontSize: 34, color: colors.text, textAlign: 'center', minHeight: 120 },
 });

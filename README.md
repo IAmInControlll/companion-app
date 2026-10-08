@@ -30,6 +30,12 @@ See **[SETUP.md](SETUP.md)** to get it running.
 - Supabase (Postgres + RLS, Realtime, Storage, Edge Functions) in `supabase/`
 - Firebase Cloud Messaging via `@react-native-firebase/messaging`
 
+## Design system
+- **Tokens** in `src/lib/theme.ts`: neutral dark surfaces, one pink accent (primary actions, selection, the heart), chalk inks only for content.
+- **Type**: Nunito for everything you operate; the PatrickHand chalk font only for "on the board" moments (wordmark, today's question, big numbers).
+- **Components** in `src/components/ui.tsx`: `Button` (one primary per screen), `IconButton`, `Chip` (selection only), `Segmented`, `ListGroup`/`ListRow`, `Sheet`, `Header`, `Icon`.
+- **Icons**: Material Symbols subset into `assets/fonts/ChalkIcons-*.ttf`. Add a name in `scripts/build-icons.py`, run `python scripts/build-icons.py` (needs `pip install fonttools`), then use `<Icon name="…" />`. Emoji are content (avatars, moods, reactions), never UI icons.
+
 ## Layout
 ```
 index.ts                 entry: registers widget + push headless handlers

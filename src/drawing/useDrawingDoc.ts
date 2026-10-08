@@ -110,8 +110,12 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
     });
   }, []);
 
-  /** Picking a preset resets any custom colour/border. */
-  const setBoard = useCallback((board: BoardId) => setState((s) => ({ ...s, doc: { ...s.doc, board, style: undefined } })), []);
+  /** Picking a preset resets a custom background colour but keeps the chosen border. */
+  const setBoard = useCallback(
+    (board: BoardId) =>
+      setState((s) => ({ ...s, doc: { ...s.doc, board, style: s.doc.style?.frame ? { frame: s.doc.style.frame } : undefined } })),
+    [],
+  );
   const setStyle = useCallback(
     (patch: BoardStyle) => setState((s) => ({ ...s, doc: { ...s.doc, style: { ...s.doc.style, ...patch } } })),
     [],

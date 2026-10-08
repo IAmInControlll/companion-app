@@ -84,7 +84,7 @@ and open the app on your phone. When you want a standalone APK to give to your p
 
 ## Before publishing to Google Play
 
-- **Privacy policy**: Play needs a public URL. Host `PRIVACY.md` (same text as the in-app screen in `src/lib/privacy.ts`; fill in the contact email in both) e.g. on GitHub Pages.
+- **Privacy policy**: Play needs a public URL. Host `PRIVACY.md` (same text as the in-app screen in `src/lib/privacy.ts`) e.g. on GitHub Pages.
 - **Account deletion**: in-app under **Me → Delete account**. Play also asks for a web page explaining how to request deletion; a short section on the same page as the privacy policy is enough.
 - **Icons** are generated (chalk heart on a chalkboard): `assets/images/*` and the white notification icon in `assets/notification-icon/` (installed by `plugins/withNotificationIcon.js`). Native changes need a new build (`npm run build:dev`).
 

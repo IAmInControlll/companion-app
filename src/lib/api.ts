@@ -85,7 +85,13 @@ export async function regenerateInvite(spaceId: string): Promise<string> {
 
 export type PostWithReactions = Post & { reactions: Reaction[] };
 
-export async function listPosts(spaceId: string, opts: { before?: string; limit?: number; kind?: PostKind } = {}) {
+/** Whose posts: everyone's, only `author.is`, or everyone except `author.not`. */
+export type AuthorFilter = { is?: string; not?: string };
+
+export async function listPosts(
+  spaceId: string,
+  opts: { before?: string; limit?: number; kind?: PostKind; author?: AuthorFilter } = {},
+) {
   let q = supabase
     .from('posts')
     .select('*, reactions(*)')
@@ -94,6 +100,8 @@ export async function listPosts(spaceId: string, opts: { before?: string; limit?
     .limit(opts.limit ?? 20);
   if (opts.before) q = q.lt('created_at', opts.before);
   if (opts.kind) q = q.eq('kind', opts.kind);
+  if (opts.author?.is) q = q.eq('author_id', opts.author.is);
+  if (opts.author?.not) q = q.neq('author_id', opts.author.not);
   return (unwrap(await q) ?? []) as PostWithReactions[];
 }
 

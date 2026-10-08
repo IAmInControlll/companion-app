@@ -4,7 +4,7 @@ import type { WidgetConfigurationScreenProps } from 'react-native-android-widget
 
 import { listSpaces, type SpaceWithMembers } from '@/lib/api';
 import { currentUserId } from '@/lib/supabase';
-import { HAND_FONT, colors } from '@/lib/theme';
+import { colors, radius, type } from '@/lib/theme';
 
 import { loadWidget, setWidgetSpace, type WidgetName } from './data';
 import { renderWidgetFor } from './widgets';
@@ -53,7 +53,7 @@ export function WidgetConfigScreen({ widgetInfo, renderWidget, setResult }: Widg
   if (!spaces) {
     return (
       <View style={[styles.root, { alignItems: 'center' }]}>
-        <ActivityIndicator color={colors.pink} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -64,7 +64,7 @@ export function WidgetConfigScreen({ widgetInfo, renderWidget, setResult }: Widg
       {spaces.map((s) => (
         <Pressable key={s.id} style={styles.row} onPress={() => choose(s.id)}>
           <Text style={styles.rowText}>
-            {s.kind === 'couple' ? '💞' : '👯'} {s.name}
+            {s.name}
           </Text>
           <Text style={styles.sub}>{s.members.map((m) => m.profile.display_name).join(', ')}</Text>
         </Pressable>
@@ -77,9 +77,9 @@ export function WidgetConfigScreen({ widgetInfo, renderWidget, setResult }: Widg
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, padding: 24, paddingTop: 64 },
-  title: { fontFamily: HAND_FONT, fontSize: 26, color: colors.text, marginBottom: 12 },
-  sub: { fontSize: 14, color: colors.textDim },
-  row: { backgroundColor: colors.card, borderRadius: 16, padding: 16, gap: 4 },
-  rowText: { fontFamily: HAND_FONT, fontSize: 20, color: colors.text },
+  root: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 12 },
+  title: { ...type.title, marginBottom: 12 },
+  sub: { ...type.body, color: colors.textDim, marginBottom: 8 },
+  row: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16, gap: 4 },
+  rowText: type.headline,
 });

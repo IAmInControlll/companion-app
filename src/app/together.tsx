@@ -1,14 +1,15 @@
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Avatar, Body, Button, Card, Chip, H1, H2, Input, Row, Screen, useToast } from '@/components/ui';
+import { Avatar, Body, Button, Caption, Card, Chalk, H2, Header, Icon, Input, ListGroup, ListRow, Row, Screen, useToast } from '@/components/ui';
 import {
   answerTot,
   getDailyQuestion,
   getStreak,
   listAnswers,
+  listEvents,
   nextTotPrompt,
   questionHistory,
   submitAnswer,
@@ -16,9 +17,10 @@ import {
   type PastQuestion,
 } from '@/lib/api';
 import { useSpace } from '@/lib/session';
-import { HAND_FONT, colors, radius } from '@/lib/theme';
+import { HAND_FONT, colors, radius, type } from '@/lib/theme';
 import type { Answer, DailyQuestion, StreakInfo, TotAnswer, TotPrompt } from '@/lib/types';
 import { useSpaceRealtime } from '@/lib/useRealtime';
+import { dayLabel, distanceKm, formatDistance, plural, upcoming, type Countdown } from '@/lib/util';
 import { refreshWidgets } from '@/widgets/task-handler';
 
 export default function Together() {
@@ -31,20 +33,22 @@ export default function Together() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<PastQuestion[] | null>(null);
+  const [next, setNext] = useState<Countdown | null>(null);
 
   const load = useCallback(async () => {
-    const [s, question] = await Promise.all([getStreak(space.id), getDailyQuestion(space.id)]);
+    const [s, question, events] = await Promise.all([getStreak(space.id), getDailyQuestion(space.id), listEvents(space.id).catch(() => [])]);
     setStreak(s);
     setQ(question);
+    setNext(upcoming(events, space.anniversary, space.kind)[0] ?? null);
     if (question) setAnswers(await listAnswers(space.id, question.day));
-  }, [space.id]);
+  }, [space.id, space.anniversary, space.kind]);
 
   useFocusEffect(
     useCallback(() => {
       load().catch(() => {});
     }, [load]),
   );
-  useSpaceRealtime(space.id, ['answers', 'posts', 'nudges', 'tot_answers'], () => load().catch(() => {}));
+  useSpaceRealtime(space.id, ['answers', 'posts', 'nudges', 'tot_answers', 'events'], () => load().catch(() => {}));
 
   const mine = answers.find((a) => a.user_id === userId);
   const theirs = answers.filter((a) => a.user_id !== userId);
@@ -68,60 +72,108 @@ export default function Together() {
   const nameOf = (id: string) => space.members.find((m) => m.user_id === id)?.profile;
 
   const couple = space.kind === 'couple';
+  const count = streak?.streak ?? 0;
+  const me = space.members.find((m) => m.user_id === userId)?.profile;
+  const here = me?.lat != null && me.lng != null ? { lat: me.lat, lng: me.lng } : null;
+  const theirName = others.length === 1 ? others[0].profile.display_name : 'the others';
 
   return (
     <Screen onRefresh={load}>
-      <H1>Together</H1>
+      <Header title="Together" />
 
-      <Card style={{ alignItems: 'center' }}>
-        <Text style={styles.streak}>🔥 {streak?.streak ?? 0}</Text>
-        <Body dim style={{ textAlign: 'center' }}>
+      <Card>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row gap={6}>
+            <Icon name="local_fire_department" filled size={36} color={count > 0 ? colors.yellow : colors.textFaint} />
+            <Chalk size={44} style={{ color: count > 0 ? colors.yellow : colors.text }}>
+              {count}
+            </Chalk>
+            <Caption style={{ marginTop: 10 }}>{count === 1 ? 'day' : 'days'}</Caption>
+          </Row>
+          <Row gap={0}>
+            {space.members.map((m, i) => (
+              <View key={m.user_id} collapsable={false} style={{ marginLeft: i ? -8 : 0, opacity: streak?.active_today.includes(m.user_id) ? 1 : 0.35 }}>
+                <Avatar emoji={m.profile.avatar} color={m.profile.color} size={30} />
+              </View>
+            ))}
+          </Row>
+        </Row>
+        <Body dim>
           {streak?.today_complete
             ? couple
-              ? 'You both showed up today. Streak safe!'
-              : 'Two or more of you showed up today. Streak safe!'
-            : 'Draw, nudge, or answer today’s question together to keep it going.'}
+              ? 'You both showed up today. Streak safe.'
+              : 'Two or more of you showed up today. Streak safe.'
+            : 'Draw, nudge or answer today’s question, together, to keep it going.'}
+          {streak && streak.best > count ? ` Best: ${streak.best}.` : ''}
         </Body>
-        {streak && streak.best > 0 ? <Body dim>Best: {streak.best} days</Body> : null}
-        <Row style={{ marginTop: 4 }}>
-          {space.members.map((m) => (
-            <View key={m.user_id} style={{ opacity: streak?.active_today.includes(m.user_id) ? 1 : 0.35 }}>
-              <Avatar emoji={m.profile.avatar} color={m.profile.color} size={34} />
-            </View>
-          ))}
-        </Row>
       </Card>
 
       <Card>
-        <Body dim>Today’s question</Body>
-        <H2>{q?.body ?? '…'}</H2>
+        <Caption>Today’s question</Caption>
+        <Chalk size={26}>{q?.body ?? '…'}</Chalk>
         {mine && !editing ? (
           <View style={{ gap: 10 }}>
-            <AnswerBubble name="You" text={mine.body} color={colors.pink} />
+            <AnswerBubble name="You" text={mine.body} color={colors.accent} />
             {theirs.length ? (
               theirs.map((a) => {
                 const p = nameOf(a.user_id);
                 return <AnswerBubble key={a.user_id} name={p?.display_name ?? 'Them'} text={a.body} color={p?.color ?? colors.blue} />;
               })
             ) : (
-              <Body dim>Waiting for {others.length === 1 ? others[0].profile.display_name : 'the others'} to answer… 💭</Body>
+              <Body dim>Waiting for {theirName} to answer.</Body>
             )}
-            <Chip
-              label="Edit my answer"
+            <Button
+              variant="ghost"
+              icon="edit"
+              title="Edit my answer"
               onPress={() => {
                 setDraft(mine.body);
                 setEditing(true);
               }}
+              style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }}
             />
           </View>
         ) : (
           <View style={{ gap: 10 }}>
-            <Input placeholder="Your answer…" value={draft} onChangeText={setDraft} multiline maxLength={1000} />
-            <Body dim>🔒 Their answer unlocks once you answer.</Body>
+            <Input placeholder="Your answer" value={draft} onChangeText={setDraft} multiline maxLength={1000} />
+            <Row gap={6}>
+              <Icon name="lock" size={16} color={colors.textDim} />
+              <Caption style={{ flex: 1 }}>{couple ? 'Their answer unlocks' : 'Their answers unlock'} once you answer.</Caption>
+            </Row>
             <Button title="Answer" disabled={!draft.trim()} loading={saving} onPress={save} />
           </View>
         )}
       </Card>
+
+      <ListGroup title="Us">
+        {others.map(({ user_id, profile: p }) => (
+          <ListRow
+            key={user_id}
+            leading={<Avatar emoji={p.avatar} color={p.color} size={28} />}
+            title={p.mood_emoji ? `${p.display_name} is feeling ${p.mood_emoji}` : `${p.display_name} hasn’t set a mood`}
+            subtitle={
+              [p.mood_text, here && p.lat != null && p.lng != null ? `${formatDistance(distanceKm(here, { lat: p.lat, lng: p.lng }))} away` : null]
+                .filter(Boolean)
+                .join(' · ') || undefined
+            }
+          />
+        ))}
+        <ListRow
+          leading={<Text style={styles.leadingEmoji}>{me?.mood_emoji ?? '😶'}</Text>}
+          title={me?.mood_emoji ? 'Your mood' : 'Set your mood'}
+          subtitle={me?.mood_text ?? undefined}
+          onPress={() => router.push('/mood')}
+        />
+        <ListRow
+          icon="event"
+          title={next ? (next.days === 0 ? `${next.title} is today` : `${next.title} in ${plural(next.days, 'day')}`) : 'Countdowns'}
+          subtitle={next ? undefined : 'Birthdays, trips, the next time you see each other'}
+          onPress={() => router.push('/countdowns')}
+        />
+        {here ? null : (
+          <ListRow icon="location_on" title="See how far apart you are" subtitle="Turn on location sharing" onPress={() => router.push('/settings')} />
+        )}
+      </ListGroup>
 
       <ThisOrThat />
 
@@ -132,9 +184,9 @@ export default function Together() {
             .filter((h) => h.day !== q?.day)
             .map((h) => (
               <Card key={h.day}>
-                <Body dim>{h.day}</Body>
+                <Caption>{dayLabel(`${h.day}T12:00:00`)}</Caption>
                 <Text style={styles.histQ}>{h.body}</Text>
-                {h.answers.length === 0 ? <Body dim>No answers (or yours is missing, so theirs stays locked)</Body> : null}
+                {h.answers.length === 0 ? <Body dim>Nobody answered this one.</Body> : null}
                 {h.answers.map((a) => {
                   const p = nameOf(a.user_id);
                   return <AnswerBubble key={a.user_id} name={a.user_id === userId ? 'You' : (p?.display_name ?? 'Them')} text={a.body} color={p?.color ?? colors.blue} />;
@@ -143,7 +195,9 @@ export default function Together() {
             ))}
         </View>
       ) : (
-        <Button variant="ghost" title="See past questions" onPress={() => questionHistory(space.id).then(setHistory).catch(() => {})} />
+        <ListGroup>
+          <ListRow icon="history" title="Past questions" onPress={() => questionHistory(space.id).then(setHistory).catch(() => toast("Couldn't load them"))} />
+        </ListGroup>
       )}
     </Screen>
   );
@@ -230,7 +284,7 @@ function ThisOrThat() {
       {result ? (
         <View style={{ gap: 8 }}>
           <Body>
-            You picked <Text style={{ color: colors.pink }}>{label(result.prompt, result.mine)}</Text>
+            You picked <Text style={{ color: colors.accent }}>{label(result.prompt, result.mine)}</Text>
           </Body>
           {result.theirs.length ? (
             <>
@@ -240,7 +294,7 @@ function ThisOrThat() {
                 </Body>
               ))}
               <Text style={styles.match}>
-                {result.theirs.every((a) => a.choice === result.mine) ? 'It’s a match! 💞' : 'Opposites attract 😜'}
+                {result.theirs.every((a) => a.choice === result.mine) ? 'It’s a match!' : 'Opposites attract'}
               </Text>
             </>
           ) : (
@@ -250,28 +304,28 @@ function ThisOrThat() {
         </View>
       ) : prompt ? (
         <Row gap={10}>
-          <Pressable disabled={busy} style={[styles.tot, { backgroundColor: '#3B2F45' }]} onPress={() => choose(0)}>
+          <Pressable disabled={busy} style={({ pressed }) => [styles.tot, pressed && { backgroundColor: colors.line }]} onPress={() => choose(0)}>
             <Text style={styles.totText}>{prompt.option_a}</Text>
           </Pressable>
           <Text style={styles.or}>or</Text>
-          <Pressable disabled={busy} style={[styles.tot, { backgroundColor: '#2A3F4F' }]} onPress={() => choose(1)}>
+          <Pressable disabled={busy} style={({ pressed }) => [styles.tot, pressed && { backgroundColor: colors.line }]} onPress={() => choose(1)}>
             <Text style={styles.totText}>{prompt.option_b}</Text>
           </Pressable>
         </Row>
       ) : prompt === null ? (
-        <Body dim>You’ve answered them all! 🎉 New ones are coming.</Body>
+        <Body dim>You’ve answered them all. New ones are on the way.</Body>
       ) : null}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  streak: { fontFamily: HAND_FONT, fontSize: 56, color: colors.yellow },
-  bubble: { backgroundColor: colors.cardHi, borderRadius: radius.sm, padding: 12, borderLeftWidth: 4, gap: 2 },
-  bubbleName: { fontFamily: HAND_FONT, fontSize: 17 },
-  histQ: { fontFamily: HAND_FONT, fontSize: 19, color: colors.text },
-  tot: { flex: 1, minHeight: 90, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', padding: 10 },
-  totText: { fontFamily: HAND_FONT, fontSize: 22, color: colors.text, textAlign: 'center' },
-  or: { fontFamily: HAND_FONT, fontSize: 18, color: colors.textDim },
+  leadingEmoji: { fontSize: 22, width: 28, textAlign: 'center' },
+  bubble: { backgroundColor: colors.surfaceHi, borderRadius: radius.sm, padding: 12, borderLeftWidth: 4, gap: 2 },
+  bubbleName: { ...type.label, fontSize: 14 },
+  histQ: type.headline,
+  tot: { flex: 1, minHeight: 90, borderRadius: radius.md, backgroundColor: colors.surfaceHi, alignItems: 'center', justifyContent: 'center', padding: 10 },
+  totText: { ...type.headline, textAlign: 'center' },
+  or: type.caption,
   match: { fontFamily: HAND_FONT, fontSize: 24, color: colors.yellow },
 });

@@ -70,7 +70,7 @@ export function ColorPicker({ value, onChange, width }: { value: string; onChang
         </Canvas>
       </GestureDetector>
       <Row>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: current, borderWidth: 2, borderColor: colors.border }} />
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: current, borderWidth: 2, borderColor: colors.line }} />
         <Input
           value={hexText}
           onChangeText={(t) => {

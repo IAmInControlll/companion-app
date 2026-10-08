@@ -3,8 +3,7 @@
 
 export const PRIVACY_UPDATED = '8 October 2026';
 
-/** Fill in before publishing. */
-export const PRIVACY_CONTACT = '[contact email]';
+export const PRIVACY_CONTACT = 'iamincontrol.dev@gmail.com';
 
 export const PRIVACY_SECTIONS: { title: string; body: string }[] = [
   {
