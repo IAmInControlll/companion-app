@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { supabase } from './supabase';
 import type {
   Answer,
@@ -246,7 +248,7 @@ export async function setLocation(lat: number, lng: number) {
 }
 
 export async function registerDevice(token: string) {
-  unwrap(await supabase.rpc('register_device', { p_token: token, p_platform: 'android' }));
+  unwrap(await supabase.rpc('register_device', { p_token: token, p_platform: Platform.OS }));
 }
 
 export async function unregisterDevice(token: string) {

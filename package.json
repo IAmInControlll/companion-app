@@ -32,6 +32,7 @@
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
+    "expo-widgets": "~57.0.23",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -53,14 +54,26 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "ios": "expo run:ios",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "build:dev": "eas build --profile development --platform android",
     "build:preview": "eas build --profile preview --platform android",
+    "build:dev:ios-sim": "eas build --profile development-simulator --platform ios",
+    "build:dev:ios": "eas build --profile development --platform ios",
     "test": "node --test \"src/**/*.test.ts\""
   },
   "private": true,
   "allowScripts": {
     "@shopify/react-native-skia@2.6.2": true
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "expo-widgets"
+        ]
+      }
+    }
   }
 }

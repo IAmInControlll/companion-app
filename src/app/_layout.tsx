@@ -73,6 +73,7 @@ function RootStack() {
         <Stack.Screen name="countdowns" />
         <Stack.Screen name="space/[id]" />
         <Stack.Screen name="new-space" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="nudge" options={{ animation: 'none' }} />
       </Stack.Protected>
       {/* Open to everyone. Last on purpose: when the current route is off limits, Expo Router
           redirects to the first screen it may show, and that must never be Privacy. */}

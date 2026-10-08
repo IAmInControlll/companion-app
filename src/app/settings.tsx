@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
-import { requestPinWidget } from 'react-native-android-widget';
 
 import { spaceFace } from '@/components/SpaceRow';
 import { Avatar, Body, Button, Header, Icon, Input, ListGroup, ListRow, Screen, Sheet, useToast, type IconName } from '@/components/ui';
@@ -9,7 +8,7 @@ import { deleteAccount, updateProfile, type ProfilePatch } from '@/lib/api';
 import { enableLocationSharing, syncLocation } from '@/lib/location';
 import { useSession } from '@/lib/session';
 import { GUTTER, colors, radius, type } from '@/lib/theme';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { ADD_WIDGET_HINT, pinWidget, refreshWidgets } from '@/widgets/refresh';
 import type { WidgetName } from '@/widgets/data';
 
 const AVATARS = ['🙂', '😺', '🐶', '🐻', '🐰', '🦊', '🐼', '🐸', '🦄', '🐧', '🐝', '🌸', '🌻', '🍓', '🍑', '🌙', '⭐', '☁️', '🔥', '👾', '🎧', '🎨', '🌈', '🍩'];
@@ -54,7 +53,7 @@ export default function Settings() {
 
   const toggleLocation = async (on: boolean) => {
     if (on && !(await enableLocationSharing())) {
-      toast('Location permission needed', 'Allow it in Android settings to see how far apart you are.');
+      toast('Location permission needed', 'Allow it in your phone’s settings to see how far apart you are.');
       return;
     }
     await save({ share_location: on });
@@ -63,8 +62,7 @@ export default function Settings() {
   };
 
   const pin = async (w: WidgetName) => {
-    const ok = await requestPinWidget({ widgetName: w }).catch(() => false);
-    if (!ok) toast('Add it from your home screen', 'Long-press an empty spot → Widgets → Chalkmates');
+    if (!(await pinWidget(w))) toast('Add it from your home screen', ADD_WIDGET_HINT);
   };
 
   const confirmSignOut = () =>

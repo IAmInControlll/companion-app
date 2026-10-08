@@ -15,18 +15,18 @@ and it lands on your partner's (or friends') home-screen widget, even when their
 
 **Everything else**
 - Couples (2 people) or groups (up to 12), multiple spaces per person, invite codes
-- 7 Android widgets: Chalkboard, Photo, Mood, Miss-you (tap on the widget to send), Distance, Countdown, Streak & daily question
+- 7 widgets on Android and iOS: Chalkboard, Photo, Mood, Miss-you (tap on the widget to send), Distance, Countdown, Streak & daily question
 - Moods (54 of them + custom status), nudges (miss you, hug, kiss, poke, high five, love)
 - Daily question (answers unlock once you answer), This-or-That with "in sync" score
 - Streaks, countdowns, anniversary / days together, shared photos, reactions
-- Push notifications; widgets refresh instantly via FCM data messages
+- Push notifications; widgets refresh instantly via FCM data messages (APNs background pushes on iOS)
 
 See **[SETUP.md](SETUP.md)** to get it running.
 
 ## Stack
 - Expo SDK 57 (React Native 0.86), Expo Router, React Compiler
 - `@shopify/react-native-skia` for the drawing engine (`src/drawing/`)
-- `react-native-android-widget` for home-screen widgets (`src/widgets/`)
+- `react-native-android-widget` for Android widgets (`src/widgets/`), `expo-widgets` for iOS (`src/widgets/ios/`)
 - Supabase (Postgres + RLS, Realtime, Storage, Edge Functions) in `supabase/`
 - Firebase Cloud Messaging via `@react-native-firebase/messaging`
 
@@ -41,7 +41,7 @@ See **[SETUP.md](SETUP.md)** to get it running.
 index.ts                 entry: registers widget + push headless handlers
 src/app/                 screens (Expo Router)
 src/drawing/             model, Skia renderer, canvas, toolbars, export/publish
-src/widgets/             widget UIs, data loading (headless), task handler
+src/widgets/             widget UIs, data loading (headless), task handler; ios/ + refresh.ios.ts for iOS
 src/lib/                 Supabase client, API, session, push, location, media cache
 supabase/migrations/     schema, RLS, RPCs, push triggers, seed questions
 supabase/functions/notify  edge function that sends FCM pushes

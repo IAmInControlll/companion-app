@@ -260,6 +260,17 @@ async function sendToUsers(out: Outgoing): Promise<number> {
         ? { notification: { tag: out.notification.tag, color: '#F7A8C4' } }
         : {}),
     },
+    // iOS: content-available wakes the background handler so it can push fresh data to the widgets.
+    // Silent ones must be "background" pushes at priority 5, or APNs rejects/throttles them.
+    apns: out.notification
+      ? {
+          headers: { 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-collapse-id': out.notification.tag.slice(0, 64) },
+          payload: { aps: { 'content-available': 1, sound: 'default', 'thread-id': out.data.space_id || 'chalkmates' } },
+        }
+      : {
+          headers: { 'apns-push-type': 'background', 'apns-priority': '5' },
+          payload: { aps: { 'content-available': 1 } },
+        },
     ...(out.notification ? { notification: { title: out.notification.title, body: out.notification.body } } : {}),
   });
 

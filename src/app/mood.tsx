@@ -8,7 +8,7 @@ import { updateProfile } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { GUTTER, colors, radius, type } from '@/lib/theme';
 import { goBack } from '@/lib/nav';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 
 const MOODS: { group: string; items: [string, string][] }[] = [
   {

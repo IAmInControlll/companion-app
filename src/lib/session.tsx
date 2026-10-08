@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { getActiveSpaceId, setActiveSpaceId as persistActiveSpace } from '@/widgets/data';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 
 import { getProfile, listSpaces, type SpaceWithMembers } from './api';
 import { listenForTokenRefresh, registerForPush, unregisterPush } from './push';
@@ -98,8 +98,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       });
 
     // Retry when the app comes back to the foreground (e.g. after reconnecting).
+    // iOS widgets only change when the app hands them new data, so do that on every open too.
+    if (Platform.OS === 'ios') refreshWidgets('*');
     const appState = AppState.addEventListener('change', (st) => {
-      if (st === 'active') refresh().catch(() => {});
+      if (st !== 'active') return;
+      refresh().catch(() => {});
+      if (Platform.OS === 'ios') refreshWidgets('*');
     });
 
     // Membership / profile changes (someone joins, mood updates...) refresh the shell.

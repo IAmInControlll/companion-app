@@ -1,12 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState, type ReactNode } from 'react';
 import { BackHandler, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { requestPinWidget } from 'react-native-android-widget';
 
 import { createSpace, joinSpace } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { colors, fonts, radius, type } from '@/lib/theme';
 import type { Space, SpaceKind } from '@/lib/types';
+import { ADD_WIDGET_HINT, pinWidget } from '@/widgets/refresh';
 
 import { BoardStage } from './BoardStage';
 import { ChalkTitle } from './ChalkTitle';
@@ -197,8 +197,7 @@ export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | '
 
   if (step === 'widget' && space) {
     const add = async () => {
-      const ok = await requestPinWidget({ widgetName: 'Chalkboard' }).catch(() => false);
-      if (!ok) toast('Add it from your home screen', 'Long-press an empty spot → Widgets → Chalkmates');
+      if (!(await pinWidget('Chalkboard'))) toast('Add it from your home screen', ADD_WIDGET_HINT);
       await finish(space.id);
     };
     return (

@@ -8,6 +8,19 @@
     "scheme": "chalkmates",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#1B2420",
+    "ios": {
+      "bundleIdentifier": "app.chalkmates",
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      }
+    },
     "android": {
       "package": "app.chalkmates",
       "adaptiveIcon": {
@@ -176,7 +189,108 @@
           ]
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "app.chalkmates.widgets",
+          "groupIdentifier": "group.app.chalkmates",
+          "widgets": [
+            {
+              "name": "Chalkboard",
+              "displayName": "Chalkboard",
+              "description": "Their latest drawing, right on your home screen",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "Photo",
+              "displayName": "Shared photo",
+              "description": "The latest photo from your people",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "Mood",
+              "displayName": "Mood",
+              "description": "How your people are feeling",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "MissYou",
+              "displayName": "Miss you",
+              "description": "Tap to tell them you miss them",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "Distance",
+              "displayName": "Distance",
+              "description": "How far apart you are",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "Countdown",
+              "displayName": "Countdown",
+              "description": "Days until your next special day",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "Streak",
+              "displayName": "Streak & question",
+              "description": "Your streak and today’s question",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ],
+                "contentMarginsDisabled": true
+              }
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

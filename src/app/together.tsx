@@ -21,7 +21,7 @@ import { HAND_FONT, colors, radius, type } from '@/lib/theme';
 import type { Answer, DailyQuestion, StreakInfo, TotAnswer, TotPrompt } from '@/lib/types';
 import { useSpaceRealtime } from '@/lib/useRealtime';
 import { dayLabel, distanceKm, formatDistance, plural, upcoming, type Countdown } from '@/lib/util';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 
 export default function Together() {
   const { space, userId, others } = useSpace();

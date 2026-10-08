@@ -44,6 +44,7 @@ example
 
 # secrets
 google-services.json
+GoogleService-Info.plist
 .env
 supabase/.temp
 firebase-service-account.json

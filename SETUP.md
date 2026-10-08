@@ -26,7 +26,9 @@ You need three free accounts: **Supabase** (backend), **Firebase** (push only) a
 
 1. Create a project at https://console.firebase.google.com. You can skip Analytics.
 2. **Add app → Android**, with package name `app.chalkmates`. Download `google-services.json` into the project root. It's gitignored.
-3. **Project settings → Service accounts → Generate new private key**. This downloads a JSON file. Keep it secret.
+3. **Add app → Apple**, with bundle ID `app.chalkmates`. Download `GoogleService-Info.plist` into the project root. It's gitignored too. (Needed even for simulator builds; the app won't start without it.)
+4. **Project settings → Service accounts → Generate new private key**. This downloads a JSON file. Keep it secret.
+5. iPhone push needs an Apple Developer account. See [iOS](#ios) below.
 
 ## 3. Push edge function
 
@@ -64,6 +66,7 @@ npx eas-cli@latest init                           # links the project, adds proj
 npx eas-cli@latest env:create --environment development --environment preview --name EXPO_PUBLIC_SUPABASE_URL --value https://YOUR-PROJECT-REF.supabase.co --visibility plaintext
 npx eas-cli@latest env:create --environment development --environment preview --name EXPO_PUBLIC_SUPABASE_KEY --value YOUR-KEY --visibility plaintext
 npx eas-cli@latest env:create --environment development --environment preview --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility secret
+npx eas-cli@latest env:create --environment development --environment preview --name GOOGLE_SERVICE_INFO_PLIST --type file --value ./GoogleService-Info.plist --visibility secret
 
 npm run build:dev        # development build (APK). Takes ~15 min on the free tier.
 ```
@@ -81,6 +84,47 @@ and open the app on your phone. When you want a standalone APK to give to your p
 1. Sign up on both phones. One person starts a space and shares the 6-letter code. The other taps **I have a code**.
 2. Long-press the home screen, open **Widgets → Chalkmates**, and add **Chalkboard** (and any others). If you're in more than one space, you'll be asked which space the widget should follow.
 3. Draw something and hit **Send**. It shows up on the other phone's widget within a few seconds.
+
+## iOS
+
+The app runs on iPhone from the same code. Two things work differently from Android:
+
+- **Widgets** are SwiftUI widgets (via `expo-widgets`). iOS doesn't let a widget run the app's code, so the
+  app pushes fresh data to them: whenever it’s opened, when you change something, and on every push (iOS wakes the app
+  in the background for a moment). They follow the space that's selected in the app, because iOS can't ask
+  which space each widget should show. The **Miss you** widget opens the app to send the nudge.
+- **Notifications** go through Firebase → APNs, which needs an Apple Developer account.
+
+### Without an Apple Developer account (simulator only)
+
+You can build and run in the iOS Simulator for free. Push notifications don't work in the simulator, so
+widgets only update while the app is open.
+
+```sh
+npm run build:dev:ios-sim       # EAS cloud build for the simulator
+npx eas-cli@latest build:run -p ios --latest   # installs it on a booted simulator
+npx expo start --dev-client
+```
+
+Or build locally with Xcode installed: `npm run ios`.
+
+### With an Apple Developer account ($99/year)
+
+1. **Apple Developer → Certificates, IDs & Profiles → Keys → +**: tick **Apple Push Notifications service (APNs)**
+   and download the `.p8` key. Note the Key ID and your Team ID.
+2. **Firebase → Project settings → Cloud Messaging → Apple app configuration**: upload the `.p8` with its
+   Key ID and Team ID.
+3. Build for a real iPhone. EAS creates the certificates and provisioning profiles, and registers the App
+   Group (`group.app.chalkmates`) and the widget extension (`app.chalkmates.widgets`) for you:
+   ```sh
+   npx eas-cli@latest device:create   # register your iPhone (and your partner's) for internal builds
+   npm run build:dev:ios
+   ```
+4. Widget refreshes on push rely on **Background App Refresh**. If it's off (or Low Power Mode is on), widgets
+   still catch up every time the app is opened.
+
+To publish, `eas build -p ios --profile production` then `eas submit -p ios`. App Store review needs the same
+privacy policy URL and account deletion as Google Play.
 
 ## Before publishing to Google Play
 

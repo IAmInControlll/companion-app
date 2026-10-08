@@ -4,11 +4,12 @@ import {
   getToken,
   onMessage,
   onTokenRefresh,
+  requestPermission,
   type RemoteMessage,
 } from '@react-native-firebase/messaging';
 import { PermissionsAndroid, Platform } from 'react-native';
 
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 import type { WidgetName } from '@/widgets/data';
 
 import { registerDevice, unregisterDevice } from './api';
@@ -29,6 +30,10 @@ export async function registerForPush(): Promise<string | null> {
     const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
     // Widgets still update via data pushes even if notifications are denied, so keep going.
     void res;
+  }
+  if (Platform.OS === 'ios') {
+    // Same as Android: a "no" only silences alerts; silent pushes still refresh widgets.
+    await requestPermission(getMessaging()).catch(() => {});
   }
   try {
     const token = await getToken(getMessaging());

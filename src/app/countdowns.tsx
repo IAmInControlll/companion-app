@@ -10,7 +10,7 @@ import { GUTTER, colors, radius, type } from '@/lib/theme';
 import type { SpaceEvent } from '@/lib/types';
 import { useSpaceRealtime } from '@/lib/useRealtime';
 import { anniversaryLabel, daysTogether, upcoming } from '@/lib/util';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 
 const EMOJIS = ['📅', '🎂', '💍', '✈️', '🎉', '🏖️', '🎄', '🎁', '💐', '🍽️', '🎓', '🏡', '🎬', '🎶', '❤️'];
 

@@ -8,7 +8,7 @@ import { Avatar, Button, Card, Header, IconButton, Input, ListGroup, ListRow, Ro
 import { leaveSpace, regenerateInvite, updateSpace } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { colors, fonts, type } from '@/lib/theme';
-import { refreshWidgets } from '@/widgets/task-handler';
+import { refreshWidgets } from '@/widgets/refresh';
 
 export default function SpaceSettings() {
   const { id } = useLocalSearchParams<{ id: string }>();
