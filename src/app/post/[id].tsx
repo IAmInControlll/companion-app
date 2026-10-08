@@ -124,7 +124,7 @@ export default function PostScreen() {
   return (
     <Screen>
       <View style={styles.header}>
-        <IconButton icon="arrow_back" label="Back" variant="plain" onPress={goBack} style={{ marginLeft: -10 }} />
+        <IconButton icon="arrow_back" label="Back" variant="plain" onPress={() => goBack()} style={{ marginLeft: -10 }} />
         {author ? <Avatar emoji={author.avatar} color={author.color} size={36} /> : null}
         <View style={{ flex: 1 }}>
           <Text style={type.headline} numberOfLines={1}>

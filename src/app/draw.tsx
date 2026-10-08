@@ -120,7 +120,7 @@ export default function DrawScreen() {
     if ((drawOver || photoParam) && !empty) {
       Alert.alert('Discard drawing?', drawOver ? 'Your doodle on their board will be lost.' : 'Your doodle on this photo will be lost.', [
         { text: 'Keep drawing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: goBack },
+        { text: 'Discard', style: 'destructive', onPress: () => goBack() },
       ]);
       return true;
     }

@@ -105,7 +105,7 @@ export function StatusBarScrim() {
 }
 
 /** Screen header: back button, title, optional actions on the right. */
-export function Header({ title, onBack = goBack, right, back = true }: { title?: string; onBack?: () => void; right?: ReactNode; back?: boolean }) {
+export function Header({ title, onBack = () => goBack(), right, back = true }: { title?: string; onBack?: () => void; right?: ReactNode; back?: boolean }) {
   return (
     <View style={styles.header}>
       {back ? <IconButton icon="arrow_back" label="Back" variant="plain" onPress={onBack} style={{ marginLeft: -10 }} /> : null}

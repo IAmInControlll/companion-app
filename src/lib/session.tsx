@@ -23,6 +23,12 @@ type SessionCtx = {
   loadFailed: boolean;
   activeSpace: SpaceWithMembers | null;
   setActiveSpace: (id: string) => void;
+  /**
+   * Onboarding is mid-way (invite / add-widget steps) after creating or joining a space. Keeps the
+   * onboarding screen up even though the space now exists (live updates refresh it early).
+   */
+  onboardingOpen: boolean;
+  setOnboardingOpen: (open: boolean) => void;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -51,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const userId = session?.user.id ?? null;
   const current = loaded && loaded.userId === userId ? loaded : null;
   const profile = current?.profile ?? null;
@@ -139,6 +146,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     loadFailed,
     activeSpace,
     setActiveSpace,
+    onboardingOpen,
+    setOnboardingOpen,
     refresh,
     signOut,
   };

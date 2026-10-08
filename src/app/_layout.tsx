@@ -32,12 +32,13 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { ready, userId, profile, spaces, spacesLoaded, loadFailed } = useSession();
+  const { ready, userId, profile, spaces, spacesLoaded, loadFailed, onboardingOpen } = useSession();
   const toast = useToast();
   // A missing font shouldn't brick the app: carry on (with fallbacks) if loading fails.
   const [fontsLoaded, fontError] = useFonts(FONT_SOURCES);
   const signedIn = !!userId;
-  const hasSpace = spaces.length > 0;
+  // Mid-onboarding counts as "no space yet" so the last steps aren't swapped for Home.
+  const hasSpace = spaces.length > 0 && !onboardingOpen;
   const loading = !ready || (!fontsLoaded && !fontError) || (signedIn && !spacesLoaded && !loadFailed);
 
   useLocationSync(signedIn && hasSpace && !!profile?.share_location);
@@ -56,7 +57,6 @@ function RootStack() {
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
-      <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
       <Stack.Protected guard={signedIn && !hasSpace}>
         <Stack.Screen name="onboarding" />
       </Stack.Protected>
@@ -74,6 +74,9 @@ function RootStack() {
         <Stack.Screen name="space/[id]" />
         <Stack.Screen name="new-space" options={{ presentation: 'modal' }} />
       </Stack.Protected>
+      {/* Open to everyone. Last on purpose: when the current route is off limits, Expo Router
+          redirects to the first screen it may show, and that must never be Privacy. */}
+      <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

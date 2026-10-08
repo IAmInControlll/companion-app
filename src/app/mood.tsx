@@ -73,7 +73,7 @@ export default function MoodScreen() {
       <Screen padTop>
         <Header
           title="How are you feeling?"
-          onBack={goBack}
+          onBack={() => goBack()}
           right={profile?.mood_emoji ? <Button variant="ghost" title="Clear" onPress={() => save(true)} style={{ paddingHorizontal: 8 }} /> : null}
         />
         {MOODS.map((g) => (

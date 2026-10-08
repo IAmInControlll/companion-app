@@ -67,7 +67,7 @@ export default function NoteScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ComposeHeader onClose={goBack} onSend={send} disabled={empty} busy={sending} />
+      <ComposeHeader onClose={() => goBack()} onSend={send} disabled={empty} busy={sending} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
         <View collapsable={false} style={[styles.preview, { width: size, height: size, opacity: text ? 1 : 0.55 }]}>
           <DocView doc={doc} env={env} width={size} />

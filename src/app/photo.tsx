@@ -66,7 +66,7 @@ export default function PhotoScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ComposeHeader onClose={goBack} onSend={send} disabled={!picked} busy={sending} />
+      <ComposeHeader onClose={() => goBack()} onSend={send} disabled={!picked} busy={sending} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
         {picked ? (
           <Pressable onPress={() => pick(false)} accessibilityRole="button" accessibilityLabel="Choose a different photo">

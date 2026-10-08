@@ -20,7 +20,7 @@ type StepId = 'kind' | 'name' | 'join' | 'invite' | 'widget';
  * swaps onboarding for Home straight away.
  */
 export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | 'add'; onCancel?: () => void; onFinish?: () => void }) {
-  const { profile, refresh, setActiveSpace, signOut } = useSession();
+  const { profile, refresh, setActiveSpace, signOut, setOnboardingOpen } = useSession();
   const toast = useToast();
   const { width } = useWindowDimensions();
   const [step, setStep] = useState<StepId>('kind');
@@ -39,8 +39,13 @@ export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | '
   const finish = async (id: string) => {
     setActiveSpace(id);
     await refresh().catch(() => {});
+    setOnboardingOpen(false);
     onFinish?.();
   };
+
+  // In onboarding, hold the screen for the invite / widget steps. Raised *before* the request:
+  // the live "member joined" update can arrive before the RPC returns and would swap in Home.
+  const hold = (on: boolean) => mode === 'onboarding' && setOnboardingOpen(on);
 
   // Android back walks back through the steps.
   useEffect(() => {
@@ -58,11 +63,13 @@ export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | '
   const create = async () => {
     setBusy(true);
     setError(null);
+    hold(true);
     try {
       const s = await createSpace(name.trim(), kind);
       setSpace(s);
       setStep('invite');
     } catch (e) {
+      hold(false);
       setError(e instanceof Error ? e.message : 'Something went wrong');
     } finally {
       setBusy(false);
@@ -72,6 +79,7 @@ export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | '
   const join = async () => {
     setBusy(true);
     setError(null);
+    hold(true);
     try {
       const s = await joinSpace(code);
       if (mode === 'onboarding') {
@@ -79,6 +87,7 @@ export function SpaceFlow({ mode, onCancel, onFinish }: { mode: 'onboarding' | '
         setStep('widget');
       } else await finish(s.id);
     } catch (e) {
+      hold(false);
       setError(e instanceof Error ? e.message : 'Something went wrong');
     } finally {
       setBusy(false);
