@@ -1,56 +1,42 @@
-# Welcome to your Expo app 👋
+# Chalkmates 🖍️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A free, open alternative to paid "draw on your partner's home screen" apps. Draw on a chalkboard,
+and it lands on your partner's (or friends') home-screen widget, even when their app is closed.
 
-## Get started
+**Drawing (the core)**
+- Chalk, pen, neon, marker, chalk-dust, rainbow brushes + eraser, 6 sizes, 16 colors
+- 8 boards (classic green with wooden frame, slate, midnight, plum, blush, paper, mint, night)
+- Square / wide / tall canvases
+- Text in a chalk hand font and 12 stamps; move, pinch-resize, twist-rotate, duplicate, layer
+- Undo/redo, autosaved drafts per space
+- **Draw over** their board or photo to reply on top of it
+- **Replay**: watch any drawing being drawn stroke by stroke (drawings are stored as vectors)
+- Quick chalk notes that auto-fit the board
 
-1. Install dependencies
+**Everything else**
+- Couples (2 people) or groups (up to 12), multiple spaces per person, invite codes
+- 7 Android widgets: Chalkboard, Photo, Mood, Miss-you (tap on the widget to send), Distance, Countdown, Streak & daily question
+- Moods (54 of them + custom status), nudges (miss you, hug, kiss, poke, high five, love)
+- Daily question (answers unlock once you answer), This-or-That with "in sync" score
+- Streaks, countdowns, anniversary / days together, shared photos, reactions
+- Push notifications; widgets refresh instantly via FCM data messages
 
-   ```bash
-   npm install
-   ```
+See **[SETUP.md](SETUP.md)** to get it running.
 
-2. Start the app
+## Stack
+- Expo SDK 57 (React Native 0.86), Expo Router, React Compiler
+- `@shopify/react-native-skia` for the drawing engine (`src/drawing/`)
+- `react-native-android-widget` for home-screen widgets (`src/widgets/`)
+- Supabase (Postgres + RLS, Realtime, Storage, Edge Functions) in `supabase/`
+- Firebase Cloud Messaging via `@react-native-firebase/messaging`
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+## Layout
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+index.ts                 entry: registers widget + push headless handlers
+src/app/                 screens (Expo Router)
+src/drawing/             model, Skia renderer, canvas, toolbars, export/publish
+src/widgets/             widget UIs, data loading (headless), task handler
+src/lib/                 Supabase client, API, session, push, location, media cache
+supabase/migrations/     schema, RLS, RPCs, push triggers, seed questions
+supabase/functions/notify  edge function that sends FCM pushes
+```

@@ -1,42 +1,184 @@
 {
   "expo": {
-    "name": "companion-app-tmp",
-    "slug": "companion-app-tmp",
+    "name": "Chalkmates",
+    "slug": "chalkmates",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "companionapptmp",
-    "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
+    "scheme": "chalkmates",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#1B2420",
     "android": {
+      "package": "app.chalkmates",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#2F4A3A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#1B2420",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120
         }
-      ]
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/PatrickHand-Regular.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Chalkmates shares your approximate location with your people so you can see how far apart you are."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick photos to share with your people.",
+          "cameraPermission": "Snap photos to share with your people."
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/messaging",
+        {
+          "android": {
+            "notificationIcon": "./assets/notification-icon",
+            "notificationColor": "#F7A8C4"
+          }
+        }
+      ],
+      [
+        "./plugins/withNotificationIcon",
+        {
+          "iconDir": "assets/notification-icon",
+          "color": "#F7A8C4"
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "fonts": [
+            "./assets/fonts/PatrickHand-Regular.ttf"
+          ],
+          "widgets": [
+            {
+              "name": "Chalkboard",
+              "label": "Chalkboard",
+              "description": "Their latest drawing, right on your home screen",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 3600000
+            },
+            {
+              "name": "Photo",
+              "label": "Shared photo",
+              "description": "The latest photo from your people",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 3600000
+            },
+            {
+              "name": "Mood",
+              "label": "Mood",
+              "description": "How your people are feeling",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 3600000
+            },
+            {
+              "name": "MissYou",
+              "label": "Miss you",
+              "description": "Tap to tell them you miss them",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 3600000
+            },
+            {
+              "name": "Distance",
+              "label": "Distance",
+              "description": "How far apart you are",
+              "minWidth": "110dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 3600000
+            },
+            {
+              "name": "Countdown",
+              "label": "Countdown",
+              "description": "Days until your next special day",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "Streak",
+              "label": "Streak & question",
+              "description": "Your streak and today's question",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a1f551f7-a7da-4101-98c8-ed5ad036e1e0"
+      }
+    },
+    "owner": "iamincontrol",
+    "web": {
+      "favicon": "./assets/images/favicon.png"
     }
   }
 }
