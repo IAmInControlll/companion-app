@@ -1,12 +1,13 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Header, Input, Screen, useToast } from '@/components/ui';
 import { updateProfile } from '@/lib/api';
+import { lastEmoji } from '@/lib/emoji';
 import { useSession } from '@/lib/session';
-import { GUTTER, colors, radius, type } from '@/lib/theme';
+import { GUTTER, colors, fonts, radius, type } from '@/lib/theme';
 import { goBack } from '@/lib/nav';
 import { refreshWidgets } from '@/widgets/refresh';
 
@@ -76,6 +77,7 @@ export default function MoodScreen() {
           onBack={() => goBack()}
           right={profile?.mood_emoji ? <Button variant="ghost" title="Clear" onPress={() => save(true)} style={{ paddingHorizontal: 8 }} /> : null}
         />
+        <Text style={[type.caption, { marginTop: -4 }]}>Pick one, or tap the box at the bottom to use any emoji and write your own.</Text>
         {MOODS.map((g) => (
           <View key={g.group} style={{ gap: 10 }}>
             <Text style={styles.group}>{g.group}</Text>
@@ -107,6 +109,23 @@ export default function MoodScreen() {
         ))}
       </Screen>
       <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
+        {/* Any emoji: opens the keyboard, and keeps the last emoji typed. */}
+        <TextInput
+          value={emoji ?? ''}
+          onChangeText={(t) => {
+            const e = lastEmoji(t);
+            if (e) setEmoji(e);
+            else if (!t) setEmoji(null);
+          }}
+          placeholder="＋"
+          placeholderTextColor={colors.textDim}
+          accessibilityLabel={emoji ? `Mood emoji ${emoji}. Tap to use a different one` : 'Choose any emoji'}
+          selectTextOnFocus
+          caretHidden
+          contextMenuHidden
+          autoCorrect={false}
+          style={[styles.emojiBox, emoji ? styles.emojiBoxOn : null]}
+        />
         <Input placeholder="Add a status (optional)" value={text} onChangeText={setText} maxLength={80} style={{ flex: 1 }} />
         <Button title="Share" disabled={!emoji} loading={saving} onPress={() => save()} />
       </View>
@@ -127,5 +146,20 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   cellOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  emojiBox: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.textFaint,
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 26,
+    textAlign: 'center',
+    padding: 0,
+  },
+  emojiBoxOn: { borderStyle: 'solid', borderColor: colors.accent, backgroundColor: colors.accentSoft },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, paddingTop: 12, backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.line },
 });

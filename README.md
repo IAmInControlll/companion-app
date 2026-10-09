@@ -15,10 +15,11 @@ and it lands on your partner's (or friends') home-screen widget, even when their
 
 **Everything else**
 - Couples (2 people) or groups (up to 12), multiple spaces per person, invite codes
-- 7 widgets on Android and iOS: Chalkboard, Photo, Mood, Miss-you (tap on the widget to send), Distance, Countdown, Streak & daily question
+- 6 widgets on Android and iOS: Chalkboard, Mood, Miss-you (miss you, hug, kiss, poke… right from the widget), Distance, Countdown, Streak
 - Moods (54 of them + custom status), nudges (miss you, hug, kiss, poke, high five, love)
-- Daily question (answers unlock once you answer), This-or-That with "in sync" score
-- Streaks, countdowns, anniversary / days together, shared photos, reactions
+- Timeline of who nudged, drew on or reacted to whom, with repeats grouped ("missed you ×24")
+- Daily question and This-or-That (hidden for now: `SHOW_QUESTIONS` in `src/lib/features.ts`)
+- Streaks, countdowns, anniversary / days together, reactions; boards are kept for good (no deleting)
 - Push notifications; widgets refresh instantly via FCM data messages (APNs background pushes on iOS)
 
 See **[SETUP.md](SETUP.md)** to get it running.

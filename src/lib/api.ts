@@ -135,10 +135,6 @@ export async function createPost(input: {
   return unwrap(await supabase.from('posts').insert(input).select().single());
 }
 
-export async function deletePost(postId: string) {
-  unwrap(await supabase.from('posts').delete().eq('id', postId));
-}
-
 export async function react(postId: string, userId: string, emoji: string) {
   unwrap(await supabase.from('reactions').upsert({ post_id: postId, user_id: userId, emoji }));
 }
@@ -164,9 +160,70 @@ export async function recentNudges(spaceId: string, sinceIso: string): Promise<N
         .eq('space_id', spaceId)
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(1000),
     ) ?? []
   );
+}
+
+export type NudgeScore = { sender_id: string; kind: NudgeKind; n: number };
+
+/** How many of each nudge every member has sent since `sinceIso` (null: ever). */
+export async function nudgeScores(spaceId: string, sinceIso: string | null): Promise<NudgeScore[]> {
+  const rows = unwrap(await supabase.rpc('nudge_scores', { p_space: spaceId, p_since: sinceIso })) as { sender_id: string; kind: NudgeKind; n: number | string }[];
+  return (rows ?? []).map((r) => ({ ...r, n: Number(r.n) }));
+}
+
+// ---------------------------------------------------------------------------
+// Timeline: who did what, from nudges, posts and reactions
+// ---------------------------------------------------------------------------
+
+export type Activity =
+  | { type: 'nudge'; id: string; at: string; actor: string; kind: NudgeKind }
+  | { type: 'post'; id: string; at: string; actor: string; kind: PostKind }
+  | { type: 'reaction'; id: string; at: string; actor: string; emoji: string; postId: string; postAuthor: string; postKind: PostKind };
+
+/** Everything that happened in a space since `sinceIso`, newest first. */
+export async function listActivity(spaceId: string, sinceIso: string): Promise<Activity[]> {
+  const [nudges, posts, reactions] = await Promise.all([
+    supabase
+      .from('nudges')
+      .select('id, sender_id, kind, created_at')
+      .eq('space_id', spaceId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(2000),
+    supabase
+      .from('posts')
+      .select('id, author_id, kind, created_at')
+      .eq('space_id', spaceId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('reactions')
+      .select('user_id, emoji, created_at, post:posts!inner(id, author_id, kind, space_id)')
+      .eq('post.space_id', spaceId)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(500),
+  ]);
+  const items: Activity[] = [
+    ...(unwrap(nudges) ?? []).map((n) => ({ type: 'nudge' as const, id: n.id, at: n.created_at, actor: n.sender_id, kind: n.kind as NudgeKind })),
+    ...(unwrap(posts) ?? []).map((p) => ({ type: 'post' as const, id: p.id, at: p.created_at, actor: p.author_id, kind: p.kind as PostKind })),
+    ...((unwrap(reactions) ?? []) as unknown as { user_id: string; emoji: string; created_at: string; post: { id: string; author_id: string; kind: PostKind } }[]).map(
+      (r) => ({
+        type: 'reaction' as const,
+        id: `${r.post.id}:${r.user_id}`,
+        at: r.created_at,
+        actor: r.user_id,
+        emoji: r.emoji,
+        postId: r.post.id,
+        postAuthor: r.post.author_id,
+        postKind: r.post.kind,
+      }),
+    ),
+  ];
+  return items.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +305,8 @@ export async function setLocation(lat: number, lng: number) {
 }
 
 export async function registerDevice(token: string) {
-  unwrap(await supabase.rpc('register_device', { p_token: token, p_platform: Platform.OS }));
+  // Android shows nudge notifications itself (src/lib/localNudges.ts).
+  unwrap(await supabase.rpc('register_device', { p_token: token, p_platform: Platform.OS, p_local_nudges: Platform.OS === 'android' }));
 }
 
 export async function unregisterDevice(token: string) {

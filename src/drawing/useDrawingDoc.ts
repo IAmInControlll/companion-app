@@ -1,15 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { moveLayer as reorder, type LayerMove } from './layers';
 import { newDoc, type BoardId, type BoardStyle, type Doc, type Item } from './model';
 
 const MAX_HISTORY = 100;
 
-type State = { doc: Doc; past: Item[][]; future: Item[][] };
+/** What undo/redo restores: the items, plus the photo background and the shape it set. */
+type Snapshot = { items: Item[]; bgImagePath?: string | null; aspect: number };
+type State = { doc: Doc; past: Snapshot[]; future: Snapshot[] };
+
+const snap = (doc: Doc): Snapshot => ({ items: doc.items, bgImagePath: doc.bgImagePath, aspect: doc.aspect });
+const apply = (doc: Doc, s: Snapshot): Doc => ({ ...doc, items: s.items, bgImagePath: s.bgImagePath, aspect: s.aspect });
 
 /**
- * Drawing document with undo/redo. Only item changes are tracked in history;
- * board/aspect changes apply immediately.
+ * Drawing document with undo/redo. Item changes and the photo background are tracked in
+ * history; board colour/border/shape changes apply immediately.
  * When `draftKey` is set the doc is autosaved and restored, so leaving the screen never loses work.
  */
 export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
@@ -61,7 +67,7 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
       if (items === s.doc.items) return s;
       return {
         doc: { ...s.doc, items },
-        past: [...s.past.slice(-MAX_HISTORY + 1), s.doc.items],
+        past: [...s.past.slice(-MAX_HISTORY + 1), snap(s.doc)],
         future: [],
       };
     });
@@ -77,24 +83,30 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
 
   const remove = useCallback((id: string) => commit((items) => items.filter((it) => it.id !== id)), [commit]);
 
-  const bringToFront = useCallback(
-    (id: string) =>
-      commit((items) => {
-        const it = items.find((i) => i.id === id);
-        return it ? [...items.filter((i) => i.id !== id), it] : items;
-      }),
-    [commit],
-  );
+  const moveLayer = useCallback((id: string, how: LayerMove) => commit((items) => reorder(items, id, how)), [commit]);
 
-  const clear = useCallback(() => commit((items) => (items.length ? [] : items)), [commit]);
+  /** A fresh board: no items and no photo background (back to square if a photo had set the shape). Undoable. */
+  const clear = useCallback(
+    () =>
+      setState((s) => {
+        const d = s.doc;
+        if (!d.items.length && !d.bgImagePath) return s;
+        return {
+          doc: { ...d, items: [], bgImagePath: null, aspect: d.bgImagePath ? 1 : d.aspect },
+          past: [...s.past.slice(-MAX_HISTORY + 1), snap(d)],
+          future: [],
+        };
+      }),
+    [],
+  );
 
   const undo = useCallback(() => {
     setState((s) => {
       if (!s.past.length) return s;
       return {
-        doc: { ...s.doc, items: s.past[s.past.length - 1] },
+        doc: apply(s.doc, s.past[s.past.length - 1]),
         past: s.past.slice(0, -1),
-        future: [s.doc.items, ...s.future],
+        future: [snap(s.doc), ...s.future],
       };
     });
   }, []);
@@ -103,8 +115,8 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
     setState((s) => {
       if (!s.future.length) return s;
       return {
-        doc: { ...s.doc, items: s.future[0] },
-        past: [...s.past, s.doc.items],
+        doc: apply(s.doc, s.future[0]),
+        past: [...s.past, snap(s.doc)],
         future: s.future.slice(1),
       };
     });
@@ -121,11 +133,13 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
     [],
   );
   const setAspect = useCallback((aspect: number) => setState((s) => ({ ...s, doc: { ...s.doc, aspect } })), []);
+  /** Undoable, like drawing (unless `history` is false, e.g. loading their board to draw over). */
   const setBackground = useCallback(
-    (bgImagePath: string | null, board?: BoardId, aspect?: number) =>
+    (bgImagePath: string | null, board?: BoardId, aspect?: number, history = true) =>
       setState((s) => ({
-        ...s,
         doc: { ...s.doc, bgImagePath, board: board ?? s.doc.board, aspect: aspect ?? s.doc.aspect },
+        past: history ? [...s.past.slice(-MAX_HISTORY + 1), snap(s.doc)] : s.past,
+        future: history ? [] : s.future,
       })),
     [],
   );
@@ -146,7 +160,7 @@ export function useDrawingDoc(initial: Doc, draftKey?: string | null) {
     add,
     update,
     remove,
-    bringToFront,
+    moveLayer,
     clear,
     undo,
     redo,

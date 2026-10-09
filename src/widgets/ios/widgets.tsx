@@ -1,7 +1,7 @@
 "use no memo";
 // The 'widget' function below is serialized into the iOS widget extension, so the React Compiler must stay off.
 
-import { HStack, Image, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
+import { HStack, Image, Link, Spacer, Text, VStack, ZStack } from '@expo/ui/swift-ui';
 import {
   containerBackground,
   font,
@@ -61,6 +61,24 @@ const ChalkWidget = (card: Card, env: WidgetEnvironment) => {
     );
   }
 
+  if (card.actions && !small) {
+    return (
+      <VStack spacing={10} modifiers={[...outer, padding({ all: 14 })]}>
+        <Text modifiers={[font({ size: 15, weight: 'heavy', design: 'rounded' }), foregroundStyle('#2B1520'), lineLimit(1)]}>{card.actions.title}</Text>
+        <HStack spacing={8}>
+          {card.actions.buttons.map((b, i) => (
+            <Link key={i} destination={b.url}>
+              <Text modifiers={[font({ size: 26 }), frame({ width: 44, height: 44 }), background('#FFFFFF59'), clipShape('circle')]}>{b.emoji}</Text>
+            </Link>
+          ))}
+        </HStack>
+        <Text modifiers={[font({ size: 12, weight: 'bold', design: 'rounded' }), foregroundStyle('#5A2E44'), lineLimit(1), minimumScaleFactor(0.7)]}>
+          {card.actions.footer}
+        </Text>
+      </VStack>
+    );
+  }
+
   if (card.rows?.length && !small) {
     return (
       <VStack alignment="leading" spacing={6} modifiers={[...outer, padding({ all: 14 })]}>
@@ -104,7 +122,6 @@ const ChalkWidget = (card: Card, env: WidgetEnvironment) => {
 
 export const IOS_WIDGETS = {
   Chalkboard: createWidget('Chalkboard', ChalkWidget),
-  Photo: createWidget('Photo', ChalkWidget),
   Mood: createWidget('Mood', ChalkWidget),
   MissYou: createWidget('MissYou', ChalkWidget),
   Distance: createWidget('Distance', ChalkWidget),

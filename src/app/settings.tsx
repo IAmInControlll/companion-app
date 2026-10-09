@@ -15,13 +15,12 @@ const AVATARS = ['🙂', '😺', '🐶', '🐻', '🐰', '🦊', '🐼', '🐸',
 const COLORS = ['#F7A8C4', '#F9D77E', '#9CC9F5', '#A8E0B8', '#D7A8F7', '#FFB37A', '#8EE3D6', '#FF8A8A'];
 
 const WIDGETS: { name: WidgetName; icon: IconName; label: string; desc: string }[] = [
-  { name: 'Chalkboard', icon: 'draw', label: 'Chalkboard', desc: 'Their latest drawing or note' },
-  { name: 'Photo', icon: 'image', label: 'Photo', desc: 'The latest shared photo' },
-  { name: 'MissYou', icon: 'favorite', label: 'Miss you', desc: 'Tap it to send a miss-you' },
+  { name: 'Chalkboard', icon: 'draw', label: 'Chalkboard', desc: 'Their latest board' },
+  { name: 'MissYou', icon: 'favorite', label: 'Miss you', desc: 'Miss you, hugs, pokes and more in one tap' },
   { name: 'Mood', icon: 'mood', label: 'Mood', desc: 'How they’re feeling' },
   { name: 'Distance', icon: 'location_on', label: 'Distance', desc: 'How far apart you are' },
   { name: 'Countdown', icon: 'event', label: 'Countdown', desc: 'Your next special day' },
-  { name: 'Streak', icon: 'local_fire_department', label: 'Streak', desc: 'Your streak and today’s question' },
+  { name: 'Streak', icon: 'local_fire_department', label: 'Streak', desc: 'How many days in a row you’ve shown up' },
 ];
 
 export default function Settings() {

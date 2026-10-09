@@ -1,11 +1,17 @@
 "use no memo";
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-android-widget';
 
 import { sendNudge } from '@/lib/api';
+import { isNudgeKind } from '@/lib/nudges';
+import type { NudgeKind } from '@/lib/types';
 
-import { WIDGET_NAMES, clearWidgetSpace, loadWidget, type MissYouData, type WidgetName } from './data';
-import { MissYouWidget, renderWidgetFor } from './widgets';
+import { WIDGET_NAMES, clearWidgetSpace, loadWidget, type WidgetName } from './data';
+import { NudgeSentWidget, renderWidgetFor } from './widgets';
+
+/** How long "Sent" shows after a tap on the Miss you widget; taps meanwhile are ignored. */
+const NUDGE_COOLDOWN_MS = 1000;
 
 /** Runs headless whenever Android asks a widget to update, or the user taps one. */
 export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction, clickActionData, renderWidget }: WidgetTaskHandlerProps) {
@@ -23,22 +29,30 @@ export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction,
       await clearWidgetSpace(widgetInfo.widgetId);
       break;
     case 'WIDGET_CLICK': {
-      if (clickAction === 'MISS_YOU') {
+      // 'MISS_YOU' is what widgets drawn by older versions still send.
+      if (clickAction === 'NUDGE' || clickAction === 'MISS_YOU') {
         const spaceId = clickActionData?.spaceId as string | undefined;
-        const before = await loadWidget('MissYou', widgetInfo.widgetId);
-        if (spaceId && before.status === 'ok') {
-          // Optimistic "Sent!" state, then the real count.
-          renderWidget(<MissYouWidget data={before.data as MissYouData} spaceId={spaceId} sent />);
-          try {
-            await sendNudge(spaceId, 'miss_you');
-          } catch {
-            // fall through to re-render the normal state
-          }
-          await new Promise((r) => setTimeout(r, 1800));
-          renderWidget(renderWidgetFor('MissYou', await loadWidget('MissYou', widgetInfo.widgetId), widgetInfo));
-        } else {
-          renderWidget(renderWidgetFor('MissYou', before, widgetInfo));
+        const kind: NudgeKind = isNudgeKind(clickActionData?.kind) ? clickActionData.kind : 'miss_you';
+        if (!spaceId) break;
+        // The "Sent" state has no tap target, but taps made just before it appeared still arrive.
+        const key = `nudge-sent:${widgetInfo.widgetId}`;
+        const last = Number(await AsyncStorage.getItem(key).catch(() => null)) || 0;
+        if (Date.now() - last < NUDGE_COOLDOWN_MS) break;
+        await AsyncStorage.setItem(key, String(Date.now())).catch(() => {});
+
+        renderWidget(<NudgeSentWidget kind={kind} />);
+        const [ok] = await Promise.all([
+          sendNudge(spaceId, kind).then(
+            () => true,
+            () => false,
+          ),
+          new Promise((r) => setTimeout(r, NUDGE_COOLDOWN_MS)),
+        ]);
+        if (!ok) {
+          renderWidget(<NudgeSentWidget kind={kind} failed />);
+          await new Promise((r) => setTimeout(r, NUDGE_COOLDOWN_MS));
         }
+        renderWidget(renderWidgetFor('MissYou', await loadWidget('MissYou', widgetInfo.widgetId), widgetInfo));
       }
       break;
     }

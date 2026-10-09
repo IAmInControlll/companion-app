@@ -10,13 +10,15 @@ import {
   recentNudges,
   type SpaceWithMembers,
 } from '@/lib/api';
+import { SHOW_QUESTIONS } from '@/lib/features';
 import { loadImageDataUri } from '@/lib/media';
+import { NUDGES } from '@/lib/nudges';
 import { currentUserId } from '@/lib/supabase';
-import type { Post } from '@/lib/types';
-import { distanceKm, upcoming, daysTogether, type Countdown } from '@/lib/util';
+import type { NudgeKind, Post } from '@/lib/types';
+import { distanceKm, timeAgo, upcoming, daysTogether, type Countdown } from '@/lib/util';
 
-export type WidgetName = 'Chalkboard' | 'Photo' | 'Mood' | 'MissYou' | 'Distance' | 'Countdown' | 'Streak';
-export const WIDGET_NAMES: WidgetName[] = ['Chalkboard', 'Photo', 'Mood', 'MissYou', 'Distance', 'Countdown', 'Streak'];
+export type WidgetName = 'Chalkboard' | 'Mood' | 'MissYou' | 'Distance' | 'Countdown' | 'Streak';
+export const WIDGET_NAMES: WidgetName[] = ['Chalkboard', 'Mood', 'MissYou', 'Distance', 'Countdown', 'Streak'];
 
 const ACTIVE_SPACE_KEY = 'activeSpaceId';
 const widgetSpaceKey = (widgetId: number) => `widget-space:${widgetId}`;
@@ -43,7 +45,14 @@ type Person = { id: string; name: string; avatar: string; color: string };
 
 export type ChalkboardData = { post: Post | null; image: string | null; author: Person | null };
 export type MoodData = { people: (Person & { emoji: string | null; text: string | null; at: string | null })[] };
-export type MissYouData = { names: string; fromThemToday: number; lastFrom: string | null; lastAt: string | null };
+export type MissYouData = {
+  names: string;
+  fromThemToday: number;
+  lastFrom: string | null;
+  lastAt: string | null;
+  /** Today's nudges from the others, per kind, most common first. */
+  todayByKind?: { kind: NudgeKind; n: number }[];
+};
 export type DistanceData = { meSharing: boolean; people: (Person & { km: number | null })[] };
 export type CountdownData = { next: Countdown | null; then: Countdown | null; together: number | null; couple: boolean };
 export type StreakData = { couple: boolean; streak: number; best: number; todayComplete: boolean; answered: boolean; othersAnswered: number; question: string | null };
@@ -52,7 +61,14 @@ export type WidgetPayload =
   | { status: 'signed-out' }
   | { status: 'no-space' }
   | { status: 'error'; message: string }
-  | { status: 'ok'; space: { id: string; name: string; kind: string }; data: any };
+  | { status: 'ok'; space: WidgetSpace; data: any };
+
+export type WidgetSpace = { id: string; name: string; kind: string };
+
+/** Corner tag on a board or photo: "Us · 5m ago", plus who drew it in a group. */
+export function boardTag(space: WidgetSpace, author: Person | null, at: string) {
+  return [space.name, space.kind === 'group' ? author?.name : null, timeAgo(at)].filter(Boolean).join(' · ');
+}
 
 /** Resolve which space a widget shows, falling back to the active space or the first one. */
 async function resolveSpace(widgetId: number | undefined): Promise<SpaceWithMembers | null> {
@@ -69,9 +85,9 @@ function person(m: SpaceWithMembers['members'][number]): Person {
 async function loaders(name: WidgetName, space: SpaceWithMembers, me: string) {
   const others = space.members.filter((m) => m.user_id !== me);
   switch (name) {
-    case 'Chalkboard':
-    case 'Photo': {
-      const post = await latestPost(space.id, name === 'Photo' ? ['photo'] : ['drawing', 'note'], me);
+    case 'Chalkboard': {
+      // Every board counts, including ones drawn on a photo.
+      const post = await latestPost(space.id, ['drawing', 'note', 'photo'], me);
       const image = post ? await loadImageDataUri(post.image_path).catch(() => null) : null;
       const author = post ? space.members.find((m) => m.user_id === post.author_id) : null;
       return { post, image, author: author ? person(author) : null } satisfies ChalkboardData;
@@ -90,11 +106,15 @@ async function loaders(name: WidgetName, space: SpaceWithMembers, me: string) {
       since.setHours(0, 0, 0, 0);
       const nudges = (await recentNudges(space.id, since.toISOString())).filter((n) => n.sender_id !== me);
       const last = nudges[0];
+      const todayByKind = NUDGES.map((x) => ({ kind: x.kind, n: nudges.filter((n) => n.kind === x.kind).length }))
+        .filter((x) => x.n > 0)
+        .sort((a, b) => b.n - a.n);
       return {
         names: others.length === 1 ? others[0].profile.display_name : space.name,
         fromThemToday: nudges.length,
         lastFrom: last ? (space.members.find((m) => m.user_id === last.sender_id)?.profile.display_name ?? null) : null,
         lastAt: last?.created_at ?? null,
+        todayByKind,
       } satisfies MissYouData;
     }
     case 'Distance': {
@@ -113,7 +133,7 @@ async function loaders(name: WidgetName, space: SpaceWithMembers, me: string) {
       return { next: list[0] ?? null, then: list[1] ?? null, together: daysTogether(space.anniversary), couple: space.kind === 'couple' } satisfies CountdownData;
     }
     case 'Streak': {
-      const [streak, q] = await Promise.all([getStreak(space.id), getDailyQuestion(space.id)]);
+      const [streak, q] = await Promise.all([getStreak(space.id), SHOW_QUESTIONS ? getDailyQuestion(space.id) : null]);
       const answers = q ? await listAnswers(space.id, q.day) : [];
       return {
         couple: space.kind === 'couple',

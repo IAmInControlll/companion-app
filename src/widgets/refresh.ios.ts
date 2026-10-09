@@ -41,7 +41,7 @@ export async function refreshWidgets(names: WidgetName[] | '*' = '*') {
     list.map(async (name) => {
       try {
         const payload = await loadWidget(name);
-        const post = payload.status === 'ok' && (name === 'Chalkboard' || name === 'Photo') ? (payload.data as ChalkboardData).post : null;
+        const post = payload.status === 'ok' && name === 'Chalkboard' ? (payload.data as ChalkboardData).post : null;
         const image = post ? await sharedImage(name, post.image_path).catch(() => null) : null;
         IOS_WIDGETS[name].updateSnapshot(present(name, payload, image));
       } catch (e) {

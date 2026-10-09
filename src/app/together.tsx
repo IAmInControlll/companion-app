@@ -16,6 +16,7 @@ import {
   totAnswers,
   type PastQuestion,
 } from '@/lib/api';
+import { SHOW_QUESTIONS } from '@/lib/features';
 import { useSpace } from '@/lib/session';
 import { HAND_FONT, colors, radius, type } from '@/lib/theme';
 import type { Answer, DailyQuestion, StreakInfo, TotAnswer, TotPrompt } from '@/lib/types';
@@ -36,7 +37,11 @@ export default function Together() {
   const [next, setNext] = useState<Countdown | null>(null);
 
   const load = useCallback(async () => {
-    const [s, question, events] = await Promise.all([getStreak(space.id), getDailyQuestion(space.id), listEvents(space.id).catch(() => [])]);
+    const [s, question, events] = await Promise.all([
+      getStreak(space.id),
+      SHOW_QUESTIONS ? getDailyQuestion(space.id) : null,
+      listEvents(space.id).catch(() => []),
+    ]);
     setStreak(s);
     setQ(question);
     setNext(upcoming(events, space.anniversary, space.kind)[0] ?? null);
@@ -103,47 +108,51 @@ export default function Together() {
             ? couple
               ? 'You both showed up today. Streak safe.'
               : 'Two or more of you showed up today. Streak safe.'
-            : 'Draw, nudge or answer today’s question, together, to keep it going.'}
+            : SHOW_QUESTIONS
+              ? 'Draw, nudge or answer today’s question, together, to keep it going.'
+              : 'Draw or nudge each other every day to keep it going.'}
           {streak && streak.best > count ? ` Best: ${streak.best}.` : ''}
         </Body>
       </Card>
 
-      <Card>
-        <Caption>Today’s question</Caption>
-        <Chalk size={26}>{q?.body ?? '…'}</Chalk>
-        {mine && !editing ? (
-          <View style={{ gap: 10 }}>
-            <AnswerBubble name="You" text={mine.body} color={colors.accent} />
-            {theirs.length ? (
-              theirs.map((a) => {
-                const p = nameOf(a.user_id);
-                return <AnswerBubble key={a.user_id} name={p?.display_name ?? 'Them'} text={a.body} color={p?.color ?? colors.blue} />;
-              })
-            ) : (
-              <Body dim>Waiting for {theirName} to answer.</Body>
-            )}
-            <Button
-              variant="ghost"
-              icon="edit"
-              title="Edit my answer"
-              onPress={() => {
-                setDraft(mine.body);
-                setEditing(true);
-              }}
-              style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }}
-            />
-          </View>
-        ) : (
-          <View style={{ gap: 10 }}>
-            <Input placeholder="Your answer" value={draft} onChangeText={setDraft} multiline maxLength={1000} />
-            <Row gap={6}>
-              <Icon name="lock" size={16} color={colors.textDim} />
-              <Caption style={{ flex: 1 }}>{couple ? 'Their answer unlocks' : 'Their answers unlock'} once you answer.</Caption>
-            </Row>
-            <Button title="Answer" disabled={!draft.trim()} loading={saving} onPress={save} />
-          </View>
-        )}
-      </Card>
+      {SHOW_QUESTIONS ? (
+        <Card>
+          <Caption>Today’s question</Caption>
+          <Chalk size={26}>{q?.body ?? '…'}</Chalk>
+          {mine && !editing ? (
+            <View style={{ gap: 10 }}>
+              <AnswerBubble name="You" text={mine.body} color={colors.accent} />
+              {theirs.length ? (
+                theirs.map((a) => {
+                  const p = nameOf(a.user_id);
+                  return <AnswerBubble key={a.user_id} name={p?.display_name ?? 'Them'} text={a.body} color={p?.color ?? colors.blue} />;
+                })
+              ) : (
+                <Body dim>Waiting for {theirName} to answer.</Body>
+              )}
+              <Button
+                variant="ghost"
+                icon="edit"
+                title="Edit my answer"
+                onPress={() => {
+                  setDraft(mine.body);
+                  setEditing(true);
+                }}
+                style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }}
+              />
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              <Input placeholder="Your answer" value={draft} onChangeText={setDraft} multiline maxLength={1000} />
+              <Row gap={6}>
+                <Icon name="lock" size={16} color={colors.textDim} />
+                <Caption style={{ flex: 1 }}>{couple ? 'Their answer unlocks' : 'Their answers unlock'} once you answer.</Caption>
+              </Row>
+              <Button title="Answer" disabled={!draft.trim()} loading={saving} onPress={save} />
+            </View>
+          )}
+        </Card>
+      ) : null}
 
       <ListGroup title="Us">
         {others.map(({ user_id, profile: p }) => (
@@ -175,9 +184,9 @@ export default function Together() {
         )}
       </ListGroup>
 
-      <ThisOrThat />
+      {SHOW_QUESTIONS ? <ThisOrThat /> : null}
 
-      {history ? (
+      {!SHOW_QUESTIONS ? null : history ? (
         <View style={{ gap: 10 }}>
           <H2>Past questions</H2>
           {history

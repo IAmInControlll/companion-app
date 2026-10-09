@@ -89,6 +89,8 @@
           "color": "#F7A8C4"
         }
       ],
+      "./plugins/withLocalNotifications",
+      "expo-notifications",
       [
         "react-native-android-widget",
         {
@@ -105,19 +107,7 @@
             {
               "name": "Chalkboard",
               "label": "Chalkboard",
-              "description": "Their latest drawing, right on your home screen",
-              "minWidth": "110dp",
-              "minHeight": "110dp",
-              "targetCellWidth": 2,
-              "targetCellHeight": 2,
-              "resizeMode": "horizontal|vertical",
-              "widgetFeatures": "reconfigurable",
-              "updatePeriodMillis": 3600000
-            },
-            {
-              "name": "Photo",
-              "label": "Shared photo",
-              "description": "The latest photo from your people",
+              "description": "Their latest board, right on your home screen",
               "minWidth": "110dp",
               "minHeight": "110dp",
               "targetCellWidth": 2,
@@ -141,7 +131,7 @@
             {
               "name": "MissYou",
               "label": "Miss you",
-              "description": "Tap to tell them you miss them",
+              "description": "Send a miss you, hug, kiss or poke in one tap",
               "minWidth": "110dp",
               "minHeight": "110dp",
               "targetCellWidth": 2,
@@ -176,8 +166,8 @@
             },
             {
               "name": "Streak",
-              "label": "Streak & question",
-              "description": "Your streak and today's question",
+              "label": "Streak",
+              "description": "How many days in a row you've shown up",
               "minWidth": "110dp",
               "minHeight": "110dp",
               "targetCellWidth": 2,
@@ -207,20 +197,7 @@
             {
               "name": "Chalkboard",
               "displayName": "Chalkboard",
-              "description": "Their latest drawing, right on your home screen",
-              "ios": {
-                "supportedFamilies": [
-                  "systemSmall",
-                  "systemMedium",
-                  "systemLarge"
-                ],
-                "contentMarginsDisabled": true
-              }
-            },
-            {
-              "name": "Photo",
-              "displayName": "Shared photo",
-              "description": "The latest photo from your people",
+              "description": "Their latest board, right on your home screen",
               "ios": {
                 "supportedFamilies": [
                   "systemSmall",
@@ -245,10 +222,11 @@
             {
               "name": "MissYou",
               "displayName": "Miss you",
-              "description": "Tap to tell them you miss them",
+              "description": "Send a miss you, hug, kiss or poke in one tap",
               "ios": {
                 "supportedFamilies": [
-                  "systemSmall"
+                  "systemSmall",
+                  "systemMedium"
                 ],
                 "contentMarginsDisabled": true
               }
@@ -278,8 +256,8 @@
             },
             {
               "name": "Streak",
-              "displayName": "Streak & question",
-              "description": "Your streak and today’s question",
+              "displayName": "Streak",
+              "description": "How many days in a row you’ve shown up",
               "ios": {
                 "supportedFamilies": [
                   "systemSmall",

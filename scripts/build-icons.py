@@ -27,7 +27,8 @@ ICONS = sorted({
     'reply', 'replay', 'delete', 'share', 'content_copy', 'image', 'photo_camera', 'text_fields', 'add_photo_alternate',
     # drawing tools
     'undo', 'redo', 'brush', 'ink_eraser', 'palette', 'add_reaction', 'wallpaper', 'stylus_pen',
-    'stylus_highlighter', 'gesture', 'auto_awesome', 'flip_to_front', 'pan_tool',
+    'stylus_highlighter', 'gesture', 'auto_awesome', 'flip_to_front', 'flip_to_back', 'pan_tool',
+    'arrow_upward', 'arrow_downward',
     # together & profile
     'favorite', 'local_fire_department', 'mood', 'location_on', 'event', 'group', 'person_add',
     'quiz', 'forum', 'celebration', 'widgets', 'logout', 'lock', 'key', 'privacy_tip', 'mail',

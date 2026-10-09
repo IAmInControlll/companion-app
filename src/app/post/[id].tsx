@@ -2,14 +2,15 @@ import type { SkImage } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { postBackground } from '@/components/BoardStage';
 import { Avatar, Body, Button, H2, Header, IconButton, Loading, Row, Screen, useToast } from '@/components/ui';
 import { DocView } from '@/drawing/DrawingCanvas';
 import { useHandTypeface } from '@/drawing/fonts';
 import type { Doc } from '@/drawing/model';
-import { deletePost, getPost, react, unreact, type PostWithReactions } from '@/lib/api';
+import { loadPhotoImages } from '@/drawing/photos';
+import { getPost, react, unreact, type PostWithReactions } from '@/lib/api';
 import { loadJson, loadSkImage, signedUrl } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { GUTTER, colors, radius, type } from '@/lib/theme';
@@ -28,6 +29,7 @@ export default function PostScreen() {
   const [url, setUrl] = useState<string | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [bg, setBg] = useState<SkImage | null>(null);
+  const [images, setImages] = useState<Record<string, SkImage>>({});
   const [progress, setProgress] = useState<number | null>(null);
   const raf = useRef<number | null>(null);
 
@@ -44,6 +46,7 @@ export default function PostScreen() {
         const d = await loadJson<Doc>(p.doc_path).catch(() => null);
         if (cancelled) return;
         setDoc(d);
+        if (d) loadPhotoImages(d.items).then((m) => !cancelled && setImages(m));
         if (d?.bgImagePath) {
           const img = await loadSkImage(d.bgImagePath).catch(() => null);
           if (!cancelled) setBg(img);
@@ -76,8 +79,8 @@ export default function PostScreen() {
     return (
       <Screen>
         <Header title="" />
-        <H2>This one’s been deleted</H2>
-        <Body dim>Whoever sent it took it down.</Body>
+        <H2>This one’s gone</H2>
+        <Body dim>Its sender may have deleted their account.</Body>
       </Screen>
     );
   }
@@ -99,23 +102,6 @@ export default function PostScreen() {
     }
   };
 
-  const remove = () =>
-    Alert.alert('Delete this?', 'It will disappear from everyone’s board.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deletePost(post.id);
-            goBack();
-          } catch (e) {
-            toast("Couldn't delete it", e instanceof Error ? e.message : undefined);
-          }
-        },
-      },
-    ]);
-
   const reactionSummary = post.reactions
     .filter((r) => r.user_id !== userId)
     .map((r) => `${space?.members.find((m) => m.user_id === r.user_id)?.profile.display_name ?? 'Someone'} ${r.emoji}`)
@@ -132,12 +118,11 @@ export default function PostScreen() {
           </Text>
           <Text style={type.caption}>{formatWhen(post.created_at)}</Text>
         </View>
-        {mine ? <IconButton icon="delete" label="Delete" variant="plain" color={colors.textDim} onPress={remove} /> : null}
       </View>
 
       <View style={[styles.board, { width: W, aspectRatio: post.aspect, backgroundColor: postBackground(post) }]}>
         {progress !== null && doc ? (
-          <DocView doc={doc} env={{ typeface, bgImage: bg }} width={W} progress={progress} />
+          <DocView doc={doc} env={{ typeface, bgImage: bg, images }} width={W} progress={progress} />
         ) : url ? (
           <Image source={{ uri: url }} style={{ flex: 1 }} contentFit="contain" transition={150} />
         ) : null}
@@ -167,25 +152,16 @@ export default function PostScreen() {
         </View>
       )}
 
-      <Row gap={10}>
-        {doc && mine ? (
-          // Your own post: replay is the only action, so give it words.
-          <Button variant="secondary" icon="replay" title={progress !== null && progress < 1 ? 'Replaying…' : 'Watch it being drawn'} onPress={replay} style={{ flex: 1 }} />
-        ) : doc ? (
-          <IconButton icon="replay" label={progress !== null && progress < 1 ? 'Replaying' : 'Watch it being drawn'} size={52} onPress={replay} />
-        ) : null}
-        {mine ? null : (
-          <>
-            <Button variant="secondary" icon="reply" title="Reply" onPress={() => router.push(`/draw?space=${post.space_id}`)} style={{ flex: 1 }} />
-            <Button
-              icon="draw"
-              title={post.kind === 'photo' ? 'Doodle on it' : 'Draw on it'}
-              onPress={() => router.push(`/draw?over=${post.id}&space=${post.space_id}`)}
-              style={{ flex: 1 }}
-            />
-          </>
-        )}
-      </Row>
+      {/* Same actions whoever drew it (and wherever you came from): replay, then reply / draw on it. */}
+      {doc ? (
+        <Button variant="secondary" icon="replay" title={progress !== null && progress < 1 ? 'Replaying…' : 'Watch it being drawn'} onPress={replay} />
+      ) : null}
+      {mine ? null : (
+        <Row gap={10}>
+          <Button variant="secondary" icon="reply" title="Reply" onPress={() => router.push(`/draw?space=${post.space_id}`)} style={{ flex: 1 }} />
+          <Button icon="draw" title="Draw on it" onPress={() => router.push(`/draw?over=${post.id}&space=${post.space_id}`)} style={{ flex: 1 }} />
+        </Row>
+      )}
     </Screen>
   );
 }

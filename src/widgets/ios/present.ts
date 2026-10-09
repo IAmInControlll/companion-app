@@ -1,15 +1,19 @@
 import { BOARDS, type BoardId } from '@/drawing/model';
+import { SHOW_QUESTIONS } from '@/lib/features';
+import { NUDGES, nudgeInfo } from '@/lib/nudges';
 import { formatDistance, plural, timeAgo } from '@/lib/util';
 
-import type {
-  ChalkboardData,
-  CountdownData,
-  DistanceData,
-  MissYouData,
-  MoodData,
-  StreakData,
-  WidgetName,
-  WidgetPayload,
+import {
+  boardTag,
+  type ChalkboardData,
+  type CountdownData,
+  type DistanceData,
+  type MissYouData,
+  type MoodData,
+  type StreakData,
+  type WidgetName,
+  type WidgetPayload,
+  type WidgetSpace,
 } from '../data';
 import type { Card, CardLine } from './types';
 
@@ -44,9 +48,7 @@ export function present(name: WidgetName, payload: WidgetPayload, image: string 
   const { space, data } = payload;
   switch (name) {
     case 'Chalkboard':
-      return chalkboard(data, space.id, image);
-    case 'Photo':
-      return photo(data, space.id, image);
+      return chalkboard(data, space, image);
     case 'Mood':
       return mood(data);
     case 'MissYou':
@@ -60,10 +62,10 @@ export function present(name: WidgetName, payload: WidgetPayload, image: string 
   }
 }
 
-function chalkboard({ post, author }: ChalkboardData, spaceId: string, image: string | null): Card {
+function chalkboard({ post, author }: ChalkboardData, space: WidgetSpace, image: string | null): Card {
   if (!post || !image) {
     return {
-      url: `${SCHEME}draw?space=${spaceId}`,
+      url: `${SCHEME}draw?space=${space.id}`,
       bg: C.board,
       lines: [
         { text: 'Nothing yet', size: 22, color: C.text, hand: true },
@@ -76,19 +78,7 @@ function chalkboard({ post, author }: ChalkboardData, spaceId: string, image: st
     bg: post.bg_color ?? (BOARDS[post.board as BoardId] ?? BOARDS.classic).base,
     image,
     imageMode: 'fit',
-    tag: `${author?.avatar ?? ''} ${timeAgo(post.created_at)}`.trim(),
-    lines: [],
-  };
-}
-
-function photo({ post, author }: ChalkboardData, spaceId: string, image: string | null): Card {
-  if (!post || !image) return message('photo.badge.plus', 'No photos yet. Tap to share one', `photo?space=${spaceId}`);
-  return {
-    url: `${SCHEME}post/${post.id}`,
-    bg: C.surface,
-    image,
-    imageMode: 'fill',
-    tag: `${author?.avatar ?? ''} ${author?.name ?? ''} · ${timeAgo(post.created_at)}`.trim(),
+    tag: boardTag(space, author, post.created_at),
     lines: [],
   };
 }
@@ -110,18 +100,26 @@ function mood({ people }: MoodData): Card {
 }
 
 function missYou(data: MissYouData, spaceId: string): Card {
+  // iOS widgets can't make network calls on tap, so the app sends it (src/app/nudge.tsx).
+  const send = (kind: string) => `${SCHEME}nudge?space=${spaceId}&kind=${kind}`;
+  const today = data.todayByKind?.length
+    ? `${data.lastFrom ?? 'They'} today: ${data.todayByKind.map((x) => `${nudgeInfo(x.kind).emoji}${x.n > 1 ? `×${x.n}` : ''}`).join(' ')}`
+    : null;
   return {
-    // iOS widgets can't make network calls on tap, so the app sends it (src/app/nudge.tsx).
-    url: `${SCHEME}nudge?space=${spaceId}`,
+    // Small widgets have one tap target: "miss you". Medium ones get a button per nudge.
+    url: send('miss_you'),
     bg: C.accent,
     gradient: ['#F7A8C4', '#D98BB0'],
     lines: [
       { text: '', symbol: 'heart.fill', size: 36, color: C.onAccent },
       { text: `Miss you, ${data.names}`, size: 14, color: C.onAccent, weight: 'bold', maxLines: 2 },
-      ...(data.fromThemToday > 0
-        ? [{ text: `${data.lastFrom ?? 'They'} missed you ${data.fromThemToday === 1 ? 'once' : `${data.fromThemToday}×`} today`, size: 11, color: '#5A2E44', maxLines: 2 }]
-        : []),
+      ...(today ? [{ text: today, size: 11, color: '#5A2E44', maxLines: 2 }] : []),
     ],
+    actions: {
+      title: `Send ${data.names}…`,
+      footer: today ?? 'Tap one to send it',
+      buttons: NUDGES.map((n) => ({ emoji: n.emoji, url: send(n.kind) })),
+    },
   };
 }
 
@@ -170,7 +168,11 @@ function countdown({ next, then, together, couple }: CountdownData): Card {
 }
 
 function streak(data: StreakData): Card {
-  const status = data.answered
+  const status = !SHOW_QUESTIONS
+    ? data.todayComplete
+      ? null
+      : 'Draw or nudge today to keep it'
+    : data.answered
     ? data.othersAnswered > 0
       ? data.couple === false
         ? `${data.othersAnswered + 1} answered, tap to read`
@@ -186,7 +188,7 @@ function streak(data: StreakData): Card {
       { text: String(data.streak), size: 32, color: lit ? C.yellow : C.text, hand: true },
       { text: data.todayComplete ? 'streak kept today' : 'day streak', size: 12, color: C.dim },
       ...(data.question ? [{ text: `“${data.question}”`, size: 13, color: C.text, maxLines: 3, roomy: true }] : []),
-      { text: status, size: 11, color: data.answered ? C.faint : C.accent, weight: 'bold', maxLines: 2 },
+      ...(status ? [{ text: status, size: 11, color: data.answered || !SHOW_QUESTIONS ? C.faint : C.accent, weight: 'bold' as const, maxLines: 2 }] : []),
     ],
   };
 }

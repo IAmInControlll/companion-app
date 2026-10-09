@@ -1,6 +1,7 @@
 import {
   BlendMode,
   BlurStyle,
+  ClipOp,
   FillType,
   ImageFormat,
   PaintStyle,
@@ -18,12 +19,29 @@ import {
   type SkTypeface,
 } from '@shopify/react-native-skia';
 
-import { FRAMES, prng, resolveBoard, type BoardLook, type Doc, type FrameId, type Item, type StampId, type StampItem, type Stroke, type TextItem } from './model';
+import { flattenStroke, jitterLine, passBreaks, splitPasses } from './chalk';
+import { photoHalfSize } from './layers';
+import {
+  FRAMES,
+  prng,
+  resolveBoard,
+  type BoardLook,
+  type Doc,
+  type FrameId,
+  type Item,
+  type PhotoItem,
+  type StampId,
+  type StampItem,
+  type Stroke,
+  type TextItem,
+} from './model';
 
 export type RenderEnv = {
   typeface: SkTypeface | null;
   /** Decoded image for doc.bgImagePath ("draw over"). */
   bgImage?: SkImage | null;
+  /** Decoded pictures placed on the board, by PhotoItem.path. Missing ones draw as a placeholder. */
+  images?: Record<string, SkImage>;
 };
 
 // ---------------------------------------------------------------------------
@@ -194,6 +212,16 @@ function buildPath(pts: number[], w: number, count: number): SkPath {
   return b.lineTo(X(n - 1), Y(n - 1)).build();
 }
 
+/** Straight segments through flat [x, y, ...] pixel points. */
+function polyline(pts: number[]): SkPath {
+  const b = Skia.PathBuilder.Make();
+  if (pts.length < 2) return b.build();
+  b.moveTo(pts[0], pts[1]);
+  if (pts.length === 2) return b.lineTo(pts[0] + 0.01, pts[1]).build();
+  for (let i = 2; i < pts.length; i += 2) b.lineTo(pts[i], pts[i + 1]);
+  return b.build();
+}
+
 export function drawStroke(c: SkCanvas, s: Stroke, w: number, darkBoard: boolean, frac = 1) {
   const total = s.pts.length / 2;
   const count = frac >= 1 ? total : Math.max(1, Math.ceil(total * frac));
@@ -201,15 +229,27 @@ export function drawStroke(c: SkCanvas, s: Stroke, w: number, darkBoard: boolean
 
   switch (s.brush) {
     case 'chalk': {
-      const path = buildPath(s.pts, w, count);
-      const a = strokePaint(W);
-      a.setPathEffect(Skia.PathEffect.MakeDiscrete(Math.max(2, W * 0.6), Math.max(0.5, W * 0.16), s.seed));
-      grain(a, s.color, s.seed, grainFreq(w), darkBoard ? 2.6 : 2.2, darkBoard ? -0.55 : -0.35);
-      c.drawPath(path, a);
-      const b = strokePaint(W * 0.5);
-      b.setPathEffect(Skia.PathEffect.MakeDiscrete(Math.max(1.5, W * 0.35), W * 0.22, s.seed + 1));
-      grain(b, s.color, s.seed + 1, grainFreq(w) * 1.3, 1.8, -0.4);
-      c.drawPath(path, b);
+      // Jitter anchored to the start of the stroke, so the line doesn't crawl while it's drawn
+      // (see chalk.ts), and each pass back over itself drawn on its own so it builds up like a
+      // second stroke would.
+      const line = flattenStroke(s.pts, w, count);
+      const segA = Math.max(2, W * 0.6);
+      const segB = Math.max(1.5, W * 0.35);
+      const breaks = passBreaks(line, segA, W * 0.6, W * 1.5);
+      const passesA = splitPasses(jitterLine(line, segA, Math.max(0.5, W * 0.16), s.seed), segA, breaks);
+      const passesB = splitPasses(jitterLine(line, segB, W * 0.22, s.seed + 1), segB, breaks);
+      for (let i = 0; i < Math.max(passesA.length, passesB.length); i++) {
+        if (passesA[i]) {
+          const a = strokePaint(W);
+          grain(a, s.color, s.seed + i * 7, grainFreq(w), darkBoard ? 2.6 : 2.2, darkBoard ? -0.55 : -0.35);
+          c.drawPath(polyline(passesA[i]), a);
+        }
+        if (passesB[i]) {
+          const b = strokePaint(W * 0.5);
+          grain(b, s.color, s.seed + 1 + i * 7, grainFreq(w) * 1.3, 1.8, -0.4);
+          c.drawPath(polyline(passesB[i]), b);
+        }
+      }
       break;
     }
     case 'pen': {
@@ -442,6 +482,72 @@ export function drawStamp(c: SkCanvas, s: StampItem, w: number, darkBoard: boole
   c.restore();
 }
 
+/** The heart stamp path spans x 2–22, y 3–21.35 of its 24-unit box: the square around it. */
+const HEART_SQUARE = { x: 2, y: 2.175, side: 20, cx: 12, cy: 12.175 };
+
+/**
+ * A placed picture: plain by default, or cut to a shape (rounded / circle / heart; circle and
+ * heart crop the middle of the photo), optionally with a thin white edge like a print.
+ */
+export function drawPhoto(c: SkCanvas, p: PhotoItem, w: number, env: RenderEnv, frac = 1) {
+  const { hw, hh } = photoHalfSize(p);
+  const W = hw * 2 * w;
+  const H = hh * 2 * w;
+  const shape = p.shape ?? 'plain';
+  const alpha = Math.max(0, Math.min(1, frac));
+  const img = env.images?.[p.path];
+  c.save();
+  c.translate(p.x * w, p.y * w);
+  c.rotate(p.rot, 0, 0);
+
+  // The heart is drawn in its path's own 24-unit space, scaled to the picture's size.
+  let unit = 1;
+  if (shape === 'heart') {
+    unit = W / HEART_SQUARE.side;
+    c.scale(unit, unit);
+    c.translate(-HEART_SQUARE.cx, -HEART_SQUARE.cy);
+  }
+  const rect = shape === 'heart' ? Skia.XYWHRect(HEART_SQUARE.x, HEART_SQUARE.y, HEART_SQUARE.side, HEART_SQUARE.side) : Skia.XYWHRect(-W / 2, -H / 2, W, H);
+  let outline: SkPath;
+  if (shape === 'heart') outline = stampPath('heart');
+  else {
+    outline = Skia.Path.Make();
+    if (shape === 'circle') outline.addOval(rect);
+    else if (shape === 'rounded') outline.addRRect(Skia.RRectXY(rect, W * 0.06, W * 0.06));
+    else outline.addRect(rect);
+  }
+
+  const fill = Skia.Paint();
+  fill.setAntiAlias(true);
+  if (img) {
+    // Circle and heart show the middle square of the photo.
+    const iw = img.width();
+    const ih = img.height();
+    const side = Math.min(iw, ih);
+    const src = shape === 'circle' || shape === 'heart' ? Skia.XYWHRect((iw - side) / 2, (ih - side) / 2, side, side) : Skia.XYWHRect(0, 0, iw, ih);
+    fill.setAlphaf(alpha);
+    c.save();
+    c.clipPath(outline, ClipOp.Intersect, true);
+    c.drawImageRect(img, src, rect, fill);
+    c.restore();
+  } else {
+    fill.setColor(Skia.Color('#FFFFFF'));
+    fill.setAlphaf(0.2 * alpha);
+    c.drawPath(outline, fill);
+  }
+
+  if (p.border) {
+    const edge = Skia.Paint();
+    edge.setAntiAlias(true);
+    edge.setStyle(PaintStyle.Stroke);
+    edge.setStrokeWidth(Math.max(1.5, W * 0.012) / unit);
+    edge.setColor(Skia.Color('#FFFFFF'));
+    edge.setAlphaf(0.9 * alpha);
+    c.drawPath(outline, edge);
+  }
+  c.restore();
+}
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
@@ -449,6 +555,7 @@ export function drawStamp(c: SkCanvas, s: StampItem, w: number, darkBoard: boole
 export function drawItem(c: SkCanvas, item: Item, w: number, env: RenderEnv, darkBoard: boolean, frac = 1) {
   if (item.t === 'stroke') drawStroke(c, item, w, darkBoard, frac);
   else if (item.t === 'text') drawText(c, item, w, env, darkBoard, frac);
+  else if (item.t === 'photo') drawPhoto(c, item, w, env, frac);
   else drawStamp(c, item, w, darkBoard, frac);
 }
 
@@ -551,6 +658,10 @@ export function hitTest(doc: Doc, x: number, y: number, w: number, typeface: SkT
       const m = measureText(it, w, typeface);
       rx = m.width / 2 / w + 0.02;
       ry = m.height / 2 / w + 0.02;
+    } else if (it.t === 'photo') {
+      const { hw, hh } = photoHalfSize(it);
+      rx = hw + 0.01;
+      ry = hh + 0.01;
     } else {
       rx = ry = it.size / 2 + 0.02;
     }

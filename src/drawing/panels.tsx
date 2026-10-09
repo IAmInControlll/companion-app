@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ColorPicker, RainbowSwatch, SectionLabel, SwatchButton, useRecentColors } from '@/components/ColorPicker';
 import { Slider } from '@/components/Slider';
-import { Button, Chip, Row, Sheet, type IconName } from '@/components/ui';
-import { HAND_FONT, colors, type } from '@/lib/theme';
+import { Button, Chip, Icon, Row, Sheet, type IconName } from '@/components/ui';
+import { HAND_FONT, colors, radius, type } from '@/lib/theme';
 
 import {
   ASPECTS,
@@ -45,11 +45,11 @@ export const BRUSH_ICONS: Record<BrushId, IconName> = {
   eraser: 'ink_eraser',
 };
 
-/** Brush picker shown in the composer's tray (the eraser has its own dock button). */
-export function BrushTray({ brush, onBrush }: { brush: BrushId; onBrush: (b: BrushId) => void }) {
+/** Drawing tools for the composer's tray, eraser last. Colour is picked on its own (Palette). */
+export function ToolTray({ brush, onBrush }: { brush: BrushId; onBrush: (b: BrushId) => void }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.barContent}>
-      {BRUSHES.filter((b) => b.id !== 'eraser').map((b) => (
+      {BRUSHES.map((b) => (
         <Chip key={b.id} icon={BRUSH_ICONS[b.id]} label={b.label} active={brush === b.id} onPress={() => onBrush(b.id)} />
       ))}
     </ScrollView>
@@ -156,6 +156,38 @@ export function ColorSheet({ visible, initial, onClose, onDone }: { visible: boo
   );
 }
 
+/** A big, can't-miss choice: accent icon, title and subtitle. */
+function PhotoTile({ icon, title, subtitle, onPress }: { icon: IconName; title: string; subtitle: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      style={({ pressed }) => [styles.photoTile, pressed && { backgroundColor: colors.line }]}
+    >
+      <View style={styles.photoIcon}>
+        <Icon name={icon} size={26} color={colors.onAccent} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={type.headline}>{title}</Text>
+        <Text style={type.caption}>{subtitle}</Text>
+      </View>
+      <Icon name="chevron_right" color={colors.textFaint} />
+    </Pressable>
+  );
+}
+
+/** The dock's Photo button: a movable picture, or the whole board. */
+export function PhotoSheet({ visible, onClose, onAdd, onBoard }: { visible: boolean; onClose: () => void; onAdd: () => void; onBoard: () => void }) {
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Photo">
+      <PhotoTile icon="image" title="Add a picture" subtitle="Put a photo anywhere on the board" onPress={onAdd} />
+      <PhotoTile icon="wallpaper" title="Use as the board" subtitle="Fill the whole board with a photo" onPress={onBoard} />
+    </Sheet>
+  );
+}
+
 export function BoardSheet({
   visible,
   onClose,
@@ -169,6 +201,7 @@ export function BoardSheet({
   canClear,
   hasPhoto,
   onPhoto,
+  onRotatePhoto,
   onRemovePhoto,
 }: {
   visible: boolean;
@@ -184,6 +217,7 @@ export function BoardSheet({
   /** The canvas is a photo picked on this phone. */
   hasPhoto?: boolean;
   onPhoto?: () => void;
+  onRotatePhoto?: () => void;
   onRemovePhoto?: () => void;
 }) {
   const { width } = useWindowDimensions();
@@ -198,11 +232,12 @@ export function BoardSheet({
       {onPhoto ? (
         hasPhoto ? (
           <Row gap={10}>
-            <Button variant="secondary" icon="add_photo_alternate" title="Change photo" onPress={onPhoto} style={{ flex: 1 }} />
+            <Button variant="secondary" icon="add_photo_alternate" title="Change" onPress={onPhoto} style={{ flex: 1 }} />
+            <Button variant="secondary" icon="refresh" title="Rotate" onPress={onRotatePhoto} style={{ flex: 1 }} />
             <Button variant="secondary" icon="close" title="Remove" onPress={onRemovePhoto} style={{ flex: 1 }} />
           </Row>
         ) : (
-          <Button variant="secondary" icon="add_photo_alternate" title="Draw on a photo" onPress={onPhoto} />
+          <PhotoTile icon="add_photo_alternate" title="Draw on a photo" subtitle="Pick one of yours as the board" onPress={onPhoto} />
         )
       ) : null}
       <SectionLabel>Presets</SectionLabel>
@@ -251,7 +286,7 @@ export function BoardSheet({
           <Chip key={a.id} label={a.label} active={Math.abs(aspect - a.value) < 0.01} onPress={() => onAspect(a.value)} />
         ))}
       </Row>
-      <Button variant="danger" title="Wipe the board" icon="delete" disabled={!canClear} onPress={onClear} style={{ marginTop: 4 }} />
+      <Button variant="danger" title="Clear the board" icon="delete" disabled={!canClear} onPress={onClear} style={{ marginTop: 4 }} />
     </Sheet>
   );
 }
@@ -358,6 +393,17 @@ const styles = StyleSheet.create({
   customDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFFFFF' },
   sizeBtn: { width: 30, height: 36, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
+  photoIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   boardTile: { alignItems: 'center', gap: 4, padding: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
   tileLabel: { color: colors.textDim, fontSize: 12 },
   frameChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.line },

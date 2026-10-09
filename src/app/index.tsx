@@ -6,24 +6,18 @@ import { Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BoardStage } from '@/components/BoardStage';
+import { scoreLine, standings, useNudgeScores } from '@/components/Scoreboard';
 import { SpaceRow, spaceFace } from '@/components/SpaceRow';
-import { Avatar, Icon, IconButton, ListGroup, ListRow, Sheet, StatusBarScrim, useToast } from '@/components/ui';
+import { Avatar, Icon, IconButton, Sheet, StatusBarScrim, useToast, type IconName } from '@/components/ui';
 import { getDailyQuestion, getStreak, listAnswers, listPosts, react, sendNudge, type PostWithReactions } from '@/lib/api';
+import { SHOW_QUESTIONS } from '@/lib/features';
 import { signedUrl } from '@/lib/media';
+import { NUDGES, nudgeInfo } from '@/lib/nudges';
 import { useSpace } from '@/lib/session';
 import { GUTTER, colors, fonts, radius, type } from '@/lib/theme';
 import type { NudgeKind } from '@/lib/types';
 import { useSpaceRealtime } from '@/lib/useRealtime';
 import { formatWhen } from '@/lib/util';
-
-const NUDGES: { kind: NudgeKind; emoji: string; label: string }[] = [
-  { kind: 'miss_you', emoji: '💗', label: 'Miss you' },
-  { kind: 'hug', emoji: '🤗', label: 'Hug' },
-  { kind: 'kiss', emoji: '😘', label: 'Kiss' },
-  { kind: 'love', emoji: '❤️', label: 'Love' },
-  { kind: 'high_five', emoji: '✋', label: 'High five' },
-  { kind: 'poke', emoji: '👉', label: 'Poke' },
-];
 
 type Whose = 'theirs' | 'mine';
 
@@ -38,7 +32,8 @@ export default function Home() {
   const [whose, setWhose] = useState<Whose>('theirs');
   const [latest, setLatest] = useState<{ post: PostWithReactions; url: string } | null | undefined>(undefined);
   const [streak, setStreak] = useState<{ count: number; questionOpen: boolean } | null>(null);
-  const [sheet, setSheet] = useState<'none' | 'send' | 'nudge'>('none');
+  const [nudging, setNudging] = useState(false);
+  const todayScores = useNudgeScores(space.id, 'today', nudging && !alone);
 
   const load = useCallback(async () => {
     // Nobody to hear from yet: show your own latest board.
@@ -46,7 +41,7 @@ export default function Home() {
     const [posts, s, q] = await Promise.all([
       listPosts(space.id, { limit: 1, author }),
       getStreak(space.id).catch(() => null),
-      getDailyQuestion(space.id).catch(() => null),
+      SHOW_QUESTIONS ? getDailyQuestion(space.id).catch(() => null) : null,
     ]);
     const post = posts[0] ?? null;
     setLatest(post ? { post, url: await signedUrl(post.image_path) } : null);
@@ -63,12 +58,11 @@ export default function Home() {
   useSpaceRealtime(space.id, ['posts', 'answers', 'nudges'], () => load().catch(() => {}));
 
   const nudge = async (kind: NudgeKind) => {
-    setSheet('none');
+    setNudging(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     try {
       await sendNudge(space.id, kind);
-      const n = NUDGES.find((x) => x.kind === kind)!;
-      toast(`${n.emoji} Sent to ${face.name}`);
+      toast(`${nudgeInfo(kind).emoji} Sent to ${face.name}`);
     } catch {
       toast("Couldn't send", 'Check your connection and try again.');
     }
@@ -88,7 +82,7 @@ export default function Home() {
   const invite = () => Share.share({ message: `Join me on Chalkmates: open the app, tap “I have a code” and enter ${space.invite_code}` }).catch(() => {});
 
   // Square board, shrunk on short screens so the action bar never scrolls away.
-  const chrome = insets.top + 4 + 52 + 76 + 56 + 14 * 3 + (12 + 56 + 12) + insets.bottom + 8;
+  const chrome = insets.top + 4 + 52 + 76 + 56 + 14 * 3 + (12 + ACTION_SIZE + 6 + 17 + 12) + insets.bottom + 8;
   const boardSize = Math.min(width - GUTTER * 2, height - chrome);
   const post = latest?.post ?? null;
   const fromMe = whose === 'mine';
@@ -118,6 +112,7 @@ export default function Home() {
               {streak.questionOpen ? <View style={styles.dot} /> : null}
             </Pressable>
           ) : null}
+          <IconButton icon="history" label="Timeline" variant="plain" onPress={() => router.push('/timeline')} />
           <IconButton icon="photo_library" label="History" variant="plain" onPress={() => router.push('/history')} />
           <IconButton icon="settings" label="Settings" variant="plain" onPress={() => router.push('/settings')} style={{ marginRight: -8 }} />
         </View>
@@ -183,44 +178,18 @@ export default function Home() {
 
       {/* Actions */}
       <View style={[styles.bar, { paddingBottom: insets.bottom + 12 }]}>
+        {alone ? <Action icon="share" label="Invite" tone="accent" onPress={invite} a11y={`Invite ${face.waitingFor}`} /> : null}
+        <Action icon="draw" label="Draw" tone={alone ? 'plain' : 'accent'} onPress={() => router.push('/draw')} />
+        <Action icon="text_fields" label="Note" onPress={() => router.push('/note')} a11y="Write a note" />
         {alone ? null : (
-          <Pressable
-            onPress={() => nudge('miss_you')}
-            onLongPress={() => setSheet('nudge')}
-            accessibilityRole="button"
-            accessibilityLabel={`Tell ${face.name} you miss them`}
-            accessibilityHint="Long press for hugs, kisses and more"
-            style={({ pressed }) => [styles.heartBtn, pressed && { transform: [{ scale: 0.94 }] }]}
-          >
-            <Icon name="favorite" filled size={26} color={colors.accent} />
-          </Pressable>
+          <Action icon="favorite" label="Nudge" tone="heart" onPress={() => setNudging(true)} a11y={`Nudge ${face.name}`} hint="Miss you, hug, kiss, poke and more" />
         )}
-        <Pressable
-          onPress={() => (alone ? invite() : router.push('/draw'))}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.drawBtn, pressed && { opacity: 0.85 }]}
-        >
-          <Icon name={alone ? 'share' : 'draw'} size={22} color={colors.onAccent} />
-          <Text style={[type.label, { fontSize: 17, color: colors.onAccent }]}>{alone ? `Invite ${face.waitingFor}` : 'Draw'}</Text>
-        </Pressable>
-        <IconButton icon="add" label="More ways to send" size={56} onPress={() => setSheet('send')} />
+        <Action icon="mood" label="Mood" onPress={() => router.push('/mood')} a11y="Set your mood" />
       </View>
 
       <StatusBarScrim />
 
-      <Sheet visible={sheet === 'send'} onClose={() => setSheet('none')}>
-        <ListGroup>
-          <ListRow icon="draw" title="Draw" subtitle="On a fresh chalkboard" onPress={go(setSheet, '/draw')} />
-          <ListRow icon="text_fields" title="Write a note" subtitle="Typed in chalk, sized to fit" onPress={go(setSheet, '/note')} />
-          <ListRow icon="photo_camera" title="Share a photo" subtitle="Shows on their Photo widget" onPress={go(setSheet, '/photo')} />
-        </ListGroup>
-        <ListGroup>
-          {alone ? null : <ListRow icon="favorite" title="Send a nudge" subtitle="Hug, kiss, high five…" onPress={() => setSheet('nudge')} />}
-          <ListRow icon="mood" title="Set your mood" onPress={go(setSheet, '/mood')} />
-        </ListGroup>
-      </Sheet>
-
-      <Sheet visible={sheet === 'nudge'} onClose={() => setSheet('none')} title={`Send ${face.name}…`}>
+      <Sheet visible={nudging} onClose={() => setNudging(false)} title={`Send ${face.name}…`}>
         <View style={styles.nudges}>
           {NUDGES.map((n) => (
             <Pressable
@@ -235,16 +204,61 @@ export default function Home() {
             </Pressable>
           ))}
         </View>
+        {todayScores ? (
+          <Pressable
+            onPress={() => {
+              setNudging(false);
+              router.push('/timeline');
+            }}
+            accessibilityRole="button"
+            accessibilityHint="Opens the timeline"
+          >
+            <Text style={[type.caption, { textAlign: 'center' }]}>Today: {scoreLine(standings(space, userId, todayScores))}</Text>
+          </Pressable>
+        ) : null}
       </Sheet>
     </View>
   );
 }
 
-/** Close the sheet, then navigate (so the sheet isn't left open behind the new screen). */
-const go = (setSheet: (s: 'none') => void, href: '/draw' | '/note' | '/photo' | '/mood') => () => {
-  setSheet('none');
-  router.push(href);
-};
+const ACTION_SIZE = 56;
+
+/** Round button with its label underneath, for the row under the board. */
+function Action({
+  icon,
+  label,
+  onPress,
+  onLongPress,
+  tone = 'plain',
+  a11y,
+  hint,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  onLongPress?: () => void;
+  /** accent: the main action. heart: the one-tap "miss you". */
+  tone?: 'plain' | 'accent' | 'heart';
+  a11y?: string;
+  hint?: string;
+}) {
+  const bg = tone === 'accent' ? colors.accent : tone === 'heart' ? colors.text : colors.surfaceHi;
+  const fg = tone === 'accent' ? colors.onAccent : tone === 'heart' ? colors.accent : colors.text;
+  return (
+    <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityHint={hint} style={styles.action}>
+      {({ pressed }) => (
+        <>
+          <View style={[styles.actionCircle, { backgroundColor: bg }, pressed && { transform: [{ scale: 0.92 }] }]}>
+            <Icon name={icon} filled={tone === 'heart'} size={26} color={fg} />
+          </View>
+          <Text style={styles.actionLabel} numberOfLines={1}>
+            {label}
+          </Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 52 },
@@ -262,18 +276,10 @@ const styles = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
   code: { fontFamily: fonts.heavy, fontSize: 26, letterSpacing: 4, color: colors.text },
   reactions: { fontSize: 18, letterSpacing: 2 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: GUTTER, paddingTop: 12 },
-  heartBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.text, alignItems: 'center', justifyContent: 'center' },
-  drawBtn: {
-    flex: 1,
-    height: 56,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
+  bar: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: GUTTER - 8, paddingTop: 12 },
+  action: { flex: 1, alignItems: 'center', gap: 6 },
+  actionCircle: { width: ACTION_SIZE, height: ACTION_SIZE, borderRadius: ACTION_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { ...type.caption, color: colors.text },
   nudges: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   nudge: { width: '31%', flexGrow: 1, aspectRatio: 1.15, borderRadius: radius.md, backgroundColor: colors.surfaceHi, alignItems: 'center', justifyContent: 'center', gap: 4 },
 });

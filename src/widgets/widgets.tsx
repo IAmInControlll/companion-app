@@ -5,18 +5,23 @@ import { FlexWidget, ImageWidget, OverlapWidget, TextWidget, type WidgetInfo } f
 
 import { ICON_GLYPHS, type IconName } from '@/components/icon-glyphs';
 import { BOARDS, type BoardId } from '@/drawing/model';
+import { SHOW_QUESTIONS } from '@/lib/features';
+import { NUDGES, nudgeInfo } from '@/lib/nudges';
 import { fonts } from '@/lib/theme';
+import type { NudgeKind } from '@/lib/types';
 import { formatDistance, plural, timeAgo } from '@/lib/util';
 
-import type {
-  ChalkboardData,
-  CountdownData,
-  DistanceData,
-  MissYouData,
-  MoodData,
-  StreakData,
-  WidgetName,
-  WidgetPayload,
+import {
+  boardTag,
+  type ChalkboardData,
+  type CountdownData,
+  type DistanceData,
+  type MissYouData,
+  type MoodData,
+  type StreakData,
+  type WidgetName,
+  type WidgetPayload,
+  type WidgetSpace,
 } from './data';
 
 type Hex = `#${string}`;
@@ -101,13 +106,11 @@ export function renderWidgetFor(name: WidgetName, payload: WidgetPayload, info: 
   const { space, data } = payload;
   switch (name) {
     case 'Chalkboard':
-      return <ChalkboardWidget data={data} spaceId={space.id} info={info} />;
-    case 'Photo':
-      return <PhotoWidget data={data} spaceId={space.id} info={info} />;
+      return <ChalkboardWidget data={data} space={space} info={info} />;
     case 'Mood':
       return <MoodWidget data={data} />;
     case 'MissYou':
-      return <MissYouWidget data={data} spaceId={space.id} />;
+      return <MissYouWidget data={data} spaceId={space.id} info={info} />;
     case 'Distance':
       return <DistanceWidget data={data} info={info} />;
     case 'Countdown':
@@ -137,11 +140,11 @@ function Tag({ text }: { text: string }) {
 
 // ---------------------------------------------------------------------------
 
-export function ChalkboardWidget({ data, spaceId, info }: { data: ChalkboardData; spaceId: string; info: WidgetInfo }) {
+export function ChalkboardWidget({ data, space, info }: { data: ChalkboardData; space: WidgetSpace; info: WidgetInfo }) {
   const { post, image, author } = data;
   if (!post || !image) {
     return (
-      <Shell bg={C.board} path={`draw?space=${spaceId}`}>
+      <Shell bg={C.board} path={`draw?space=${space.id}`}>
         <T text="Nothing yet" size={22} align="center" font="hand" />
         <T text="Tap to draw the first one" size={12} align="center" color={hex('#C9D3CC')} />
       </Shell>
@@ -154,18 +157,7 @@ export function ChalkboardWidget({ data, spaceId, info }: { data: ChalkboardData
       <FlexWidget style={{ height: 'match_parent', width: 'match_parent', justifyContent: 'center', alignItems: 'center' }}>
         <ImageWidget image={image as `data:image${string}`} imageWidth={box.w} imageHeight={box.h} radius={RADIUS} />
       </FlexWidget>
-      <Tag text={`${author?.avatar ?? ''} ${timeAgo(post.created_at)}`.trim()} />
-    </OverlapWidget>
-  );
-}
-
-export function PhotoWidget({ data, spaceId, info }: { data: ChalkboardData; spaceId: string; info: WidgetInfo }) {
-  const { post, image, author } = data;
-  if (!post || !image) return <Message icon="add_photo_alternate" text="No photos yet. Tap to share one" path={`photo?space=${spaceId}`} />;
-  return (
-    <OverlapWidget {...link(`post/${post.id}`)} style={{ height: 'match_parent', width: 'match_parent', borderRadius: RADIUS, backgroundColor: C.surface }}>
-      <ImageWidget image={image as `data:image${string}`} imageWidth={info.width} imageHeight={info.height} resizeMode="cover" radius={RADIUS} />
-      <Tag text={`${author?.avatar ?? ''} ${author?.name ?? ''} · ${timeAgo(post.created_at)}`.trim()} />
+      <Tag text={boardTag(space, author, post.created_at)} />
     </OverlapWidget>
   );
 }
@@ -199,35 +191,71 @@ export function MoodWidget({ data }: { data: MoodData }) {
   );
 }
 
-export function MissYouWidget({ data, spaceId, sent }: { data: MissYouData; spaceId: string; sent?: boolean }) {
+const MISS = { from: hex('#F7A8C4'), to: hex('#D98BB0'), ink: hex('#5A2E44'), button: hex('#FFFFFF59') };
+
+function MissShell({ children, tappable }: { children: any; tappable?: boolean }) {
   return (
     <FlexWidget
-      clickAction="MISS_YOU"
-      clickActionData={{ spaceId }}
+      // The background opens the app, except while "Sent" shows: then taps do nothing, so one tap is one nudge.
+      {...(tappable ? link('') : {})}
       style={{
         height: 'match_parent',
         width: 'match_parent',
         borderRadius: RADIUS,
-        padding: 12,
-        backgroundGradient: { from: hex('#F7A8C4'), to: hex('#D98BB0'), orientation: 'TL_BR' },
+        padding: 10,
+        backgroundGradient: { from: MISS.from, to: MISS.to, orientation: 'TL_BR' },
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        flexGap: 2,
+        flexGap: 6,
       }}
     >
-      <Glyph name={sent ? 'check' : 'favorite'} filled size={40} color={C.onAccent} />
-      <T text={sent ? 'Sent' : `Miss you, ${data.names}`} size={14} align="center" color={C.onAccent} lines={2} font="bold" />
-      {data.fromThemToday > 0 && !sent ? (
-        <T
-          text={`${data.lastFrom ?? 'They'} missed you ${data.fromThemToday === 1 ? 'once' : `${data.fromThemToday}×`} today`}
-          size={11}
-          align="center"
-          color={hex('#5A2E44')}
-          lines={2}
-        />
-      ) : null}
+      {children}
     </FlexWidget>
+  );
+}
+
+/** One round button per nudge: 3×2 on a square widget, a single row when it's wide. */
+export function MissYouWidget({ data, spaceId, info }: { data: MissYouData; spaceId: string; info: WidgetInfo }) {
+  const wide = info.width >= info.height * 1.7;
+  const cols = wide ? 6 : 3;
+  const rows = NUDGES.length / cols;
+  const roomy = info.height >= 150 || (wide && info.height >= 100);
+  const textH = roomy ? 36 : 0;
+  const cell = Math.max(28, Math.floor(Math.min((info.width - 20 - (cols - 1) * 6) / cols, (info.height - 20 - textH - rows * 6) / rows)));
+  const today = data.todayByKind?.length
+    ? `${data.lastFrom ?? 'They'} today: ${data.todayByKind.map((x) => `${nudgeInfo(x.kind).emoji}${x.n > 1 ? `×${x.n}` : ''}`).join(' ')}`
+    : null;
+  return (
+    <MissShell tappable>
+      {roomy ? <T text={`Send ${data.names}…`} size={13} align="center" color={C.onAccent} font="heavy" /> : null}
+      {Array.from({ length: rows }, (_, r) => (
+        <FlexWidget key={r} style={{ flexDirection: 'row', flexGap: 6 }}>
+          {NUDGES.slice(r * cols, r * cols + cols).map((n) => (
+            <FlexWidget
+              key={n.kind}
+              clickAction="NUDGE"
+              clickActionData={{ spaceId, kind: n.kind }}
+              style={{ width: cell, height: cell, borderRadius: cell / 2, backgroundColor: MISS.button, justifyContent: 'center', alignItems: 'center' }}
+            >
+              <TextWidget text={n.emoji} style={{ fontSize: Math.round(cell * 0.48), textAlign: 'center' }} />
+            </FlexWidget>
+          ))}
+        </FlexWidget>
+      ))}
+      {roomy ? <T text={today ?? 'Tap one to send it'} size={11} align="center" color={MISS.ink} font="bold" /> : null}
+    </MissShell>
+  );
+}
+
+/** Shown for a moment after a tap. It has no tap target, so tapping again doesn't resend. */
+export function NudgeSentWidget({ kind, failed }: { kind: NudgeKind; failed?: boolean }) {
+  const n = nudgeInfo(kind);
+  return (
+    <MissShell>
+      {failed ? <Glyph name="refresh" size={36} color={C.onAccent} /> : <TextWidget text={n.emoji} style={{ fontSize: 40, textAlign: 'center' }} />}
+      <T text={failed ? 'Couldn’t send' : `${n.label} sent`} size={15} align="center" color={C.onAccent} font="heavy" />
+    </MissShell>
   );
 }
 
@@ -284,7 +312,11 @@ export function CountdownWidget({ data }: { data: CountdownData }) {
 }
 
 export function StreakWidget({ data, info }: { data: StreakData; info: WidgetInfo }) {
-  const status = data.answered
+  const status = !SHOW_QUESTIONS
+    ? data.todayComplete
+      ? null
+      : 'Draw or nudge today to keep it'
+    : data.answered
     ? data.othersAnswered > 0
       ? data.couple === false
         ? `${data.othersAnswered + 1} answered, tap to read`
@@ -299,7 +331,7 @@ export function StreakWidget({ data, info }: { data: StreakData; info: WidgetInf
       </FlexWidget>
       <T text={data.todayComplete ? 'streak kept today' : 'day streak'} size={12} align="center" color={C.dim} />
       {info.height > 150 && data.question ? <T text={`“${data.question}”`} size={13} align="center" lines={3} font="hand" /> : null}
-      <T text={status} size={11} align="center" color={data.answered ? C.faint : C.accent} lines={2} font="bold" />
+      {status ? <T text={status} size={11} align="center" color={data.answered || !SHOW_QUESTIONS ? C.faint : C.accent} lines={2} font="bold" /> : null}
     </Shell>
   );
 }

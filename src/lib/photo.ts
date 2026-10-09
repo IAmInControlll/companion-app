@@ -38,6 +38,12 @@ export async function pickPhoto(camera: boolean): Promise<PickedPhoto | null> {
   return { uri: out.uri, width: out.width, height: out.height };
 }
 
+/** A copy of a local photo turned 90° clockwise. */
+export async function rotatePhoto(uri: string): Promise<PickedPhoto> {
+  const out = await (await ImageManipulator.manipulate(uri).rotate(90).renderAsync()).saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
+  return { uri: out.uri, width: out.width, height: out.height };
+}
+
 /** Decode a local photo for the Skia canvas. */
 export async function loadLocalSkImage(uri: string): Promise<SkImage | null> {
   const bytes = await new File(uri).bytes();

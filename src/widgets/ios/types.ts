@@ -32,4 +32,6 @@ export type Card = {
   lines: CardLine[];
   /** List layout for several people; small widgets fall back to `lines`. */
   rows?: CardRow[];
+  /** A row of buttons, each opening its own link; small widgets fall back to `lines` + `url`. */
+  actions?: { title: string; footer: string; buttons: { emoji: string; url: string }[] };
 };

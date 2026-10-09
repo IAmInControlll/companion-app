@@ -10,19 +10,27 @@ import {
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import { refreshWidgets } from '@/widgets/refresh';
-import type { WidgetName } from '@/widgets/data';
+import { WIDGET_NAMES, type WidgetName } from '@/widgets/data';
 
 import { registerDevice, unregisterDevice } from './api';
+import { presentNudge } from './localNudges';
 
 /**
- * Handles every push, foreground or background (registered in index.ts).
- * The server tells us which widgets changed, so we only redraw those.
+ * Handles every push, foreground or background (registered in index.ts): shows nudges we display
+ * ourselves, and redraws the widgets the server says changed. Returns the nudge's title, if any.
  */
-export async function handleRemoteMessage(message: RemoteMessage) {
+export async function handleRemoteMessage(message: RemoteMessage): Promise<string | null> {
+  const nudge = presentNudge(message.data).catch((e) => {
+    console.warn('Nudge notification failed', e);
+    return null;
+  });
   const raw = message.data?.widgets;
-  if (typeof raw !== 'string' || raw === '') return;
-  const names = raw === '*' ? '*' : (raw.split(',').filter(Boolean) as WidgetName[]);
-  await refreshWidgets(names);
+  if (typeof raw === 'string' && raw !== '') {
+    // Ignore widgets this version doesn't have (e.g. the old Photo widget).
+    const names = raw === '*' ? '*' : raw.split(',').filter((n): n is WidgetName => WIDGET_NAMES.includes(n as WidgetName));
+    await refreshWidgets(names);
+  }
+  return nudge;
 }
 
 export async function registerForPush(): Promise<string | null> {
@@ -54,7 +62,8 @@ export function listenForTokenRefresh() {
 export function listenForForegroundMessages(onToast: (title: string, body: string) => void) {
   return onMessage(getMessaging(), async (message) => {
     if (message.notification?.title) onToast(message.notification.title, message.notification.body ?? '');
-    await handleRemoteMessage(message);
+    const nudge = await handleRemoteMessage(message);
+    if (nudge) onToast(nudge, '');
   });
 }
 

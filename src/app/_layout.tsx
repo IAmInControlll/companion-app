@@ -63,11 +63,11 @@ function RootStack() {
       <Stack.Protected guard={signedIn && hasSpace}>
         <Stack.Screen name="index" />
         <Stack.Screen name="history" />
+        <Stack.Screen name="timeline" />
         <Stack.Screen name="together" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="draw" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="note" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="photo" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="post/[id]" />
         <Stack.Screen name="mood" options={{ presentation: 'modal' }} />
         <Stack.Screen name="countdowns" />

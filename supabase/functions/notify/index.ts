@@ -21,19 +21,22 @@ type Outgoing = {
   recipients: string[];
   data: Record<string, string>;
   notification?: { title: string; body: string; tag: string };
+  /** Sent instead of `notification` to devices that show it themselves (devices.local_nudges). */
+  local?: Record<string, string>;
 };
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false },
 });
 
-const NUDGE_TEXT: Record<string, string> = {
-  miss_you: 'misses you 💗',
-  hug: 'sent you a hug 🤗',
-  kiss: 'sent you a kiss 😘',
-  poke: 'poked you 👉',
-  high_five: 'high-fived you ✋',
-  love: 'loves you ❤️',
+// [the first one today, the nth one today]
+const NUDGE_TEXT: Record<string, [string, (n: number) => string]> = {
+  miss_you: ['misses you 💗', (n) => `missed you ×${n} 💗`],
+  hug: ['sent you a hug 🤗', (n) => `hugged you ×${n} 🤗`],
+  kiss: ['sent you a kiss 😘', (n) => `kissed you ×${n} 😘`],
+  poke: ['poked you 👉', (n) => `poked you ×${n} 👉`],
+  high_five: ['high-fived you ✋', (n) => `high-fived you ×${n} ✋`],
+  love: ['loves you ❤️', (n) => `sent you love ×${n} ❤️`],
 };
 
 Deno.serve(async (req) => {
@@ -76,6 +79,33 @@ async function coMembers(userId: string): Promise<string[]> {
   return [...new Set((data ?? []).map((r) => r.user_id))].filter((id) => id !== userId);
 }
 
+/** Midnight on the day `at` falls on, in the given IANA time zone. */
+function startOfDay(at: Date, timeZone: string): Date {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(at);
+  } catch {
+    return startOfDay(at, 'UTC');
+  }
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return new Date(at.getTime() - ((get('hour') * 60 + get('minute')) * 60 + get('second')) * 1000 - at.getMilliseconds());
+}
+
+/** How many of this nudge the sender has sent so far today (space time), this one included. */
+async function nudgesToday(r: Record<string, any>): Promise<number> {
+  const { data: space } = await supabase.from('spaces').select('timezone').eq('id', r.space_id).maybeSingle();
+  const since = startOfDay(new Date(r.created_at), space?.timezone ?? 'UTC');
+  const { count } = await supabase
+    .from('nudges')
+    .select('id', { count: 'exact', head: true })
+    .eq('space_id', r.space_id)
+    .eq('sender_id', r.sender_id)
+    .eq('kind', r.kind)
+    .gte('created_at', since.toISOString())
+    .lte('created_at', r.created_at);
+  return Math.max(1, count ?? 1);
+}
+
 const BUCKET = 'media';
 
 /** Remove a deleted post's files; members' widgets redraw so it disappears there too. */
@@ -87,7 +117,7 @@ async function cleanupPost(r: Record<string, any>, actor: string | null): Promis
   }
   return {
     recipients: await membersExcept(r.space_id, actor),
-    data: { type: 'post-deleted', space_id: r.space_id, widgets: r.kind === 'photo' ? 'Photo' : 'Chalkboard' },
+    data: { type: 'post-deleted', space_id: r.space_id, widgets: 'Chalkboard' },
   };
 }
 
@@ -108,10 +138,10 @@ async function buildMessage({ table, op, record: r, old_record: old, actor }: Pa
       if (op === 'DELETE') return cleanupPost(r, actor);
       const name = await profileName(r.author_id);
       const what =
-        r.kind === 'drawing' ? 'drew on your board ✏️' : r.kind === 'photo' ? 'shared a photo 📷' : 'left you a note 📝';
+        r.kind === 'drawing' ? 'drew on your board ✏️' : r.kind === 'photo' ? 'drew on a photo 📷' : 'left you a note 📝';
       return {
         recipients: await membersExcept(r.space_id, r.author_id),
-        data: { type: 'post', space_id: r.space_id, widgets: r.kind === 'photo' ? 'Photo,Streak' : 'Chalkboard,Streak' },
+        data: { type: 'post', space_id: r.space_id, widgets: 'Chalkboard,Streak' },
         notification: {
           title: `${name} ${what}`,
           body: r.kind === 'note' ? String(r.body).slice(0, 120) : 'Tap to see it',
@@ -120,11 +150,19 @@ async function buildMessage({ table, op, record: r, old_record: old, actor }: Pa
       };
     }
     case 'nudges': {
-      const name = await profileName(r.sender_id);
+      const [name, n] = await Promise.all([profileName(r.sender_id), nudgesToday(r)]);
+      const [one, many] = NUDGE_TEXT[r.kind] ?? ['nudged you', (k: number) => `nudged you ×${k}`];
       return {
         recipients: await membersExcept(r.space_id, r.sender_id),
         data: { type: 'nudge', space_id: r.space_id, widgets: 'MissYou,Streak' },
-        notification: { title: `${name} ${NUDGE_TEXT[r.kind] ?? 'nudged you'}`, body: '', tag: `nudge-${r.space_id}` },
+        // One notification per person and kind, replaced as more arrive: "Z missed you ×100 💗".
+        // Phones that show it themselves count since the last one was swiped away instead of today.
+        local: { local: '1', kind: r.kind, sender_id: r.sender_id, sender_name: name },
+        notification: {
+          title: `${name} ${n > 1 ? many(n) : one}`,
+          body: '',
+          tag: `nudge-${String(r.space_id).slice(0, 8)}-${String(r.sender_id).slice(0, 8)}-${r.kind}`,
+        },
       };
     }
     case 'answers': {
@@ -239,7 +277,8 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
 }
 
 async function sendToUsers(out: Outgoing): Promise<number> {
-  const { data: devices } = await supabase.from('devices').select('token').in('user_id', out.recipients);
+  let { data: devices, error } = await supabase.from('devices').select('token, local_nudges').in('user_id', out.recipients);
+  if (error) ({ data: devices } = await supabase.from('devices').select('token').in('user_id', out.recipients)); // column not migrated yet
   if (!devices?.length) return 0;
 
   const sa = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!) as ServiceAccount;
@@ -250,7 +289,14 @@ async function sendToUsers(out: Outgoing): Promise<number> {
   // FCM deprioritizes apps whose high-priority messages don't show a notification, so silent
   // widget-only updates (location, name/avatar, edits) go NORMAL and land when the phone wakes.
   // When there's a notification, Android shows it natively; the app adds an in-app toast if foregrounded.
-  const message = (deviceToken: string) => ({
+  const message = (deviceToken: string, local: boolean) => {
+    if (local && out.local) {
+      // Data-only: the app shows (or bumps) the notification itself.
+      return { token: deviceToken, data: { ...out.data, ...out.local }, android: { priority: 'HIGH', ttl: '86400s' } };
+    }
+    return remote(deviceToken);
+  };
+  const remote = (deviceToken: string) => ({
     token: deviceToken,
     data: out.data,
     android: {
@@ -275,11 +321,11 @@ async function sendToUsers(out: Outgoing): Promise<number> {
   });
 
   const results = await Promise.all(
-    devices.map(async ({ token: deviceToken }) => {
+    devices.map(async ({ token: deviceToken, local_nudges }: { token: string; local_nudges?: boolean }) => {
       const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message(deviceToken) }),
+        body: JSON.stringify({ message: message(deviceToken, !!local_nudges) }),
       });
       if (res.ok) return true;
       const body = await res.text();

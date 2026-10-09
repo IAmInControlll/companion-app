@@ -58,7 +58,33 @@ export type StampItem = {
   seed: number;
 };
 
-export type PlacedItem = TextItem | StampItem;
+/** How a placed picture is cut out. Circle and heart crop the middle of the photo to a square. */
+export type PhotoShape = 'plain' | 'rounded' | 'circle' | 'heart';
+
+/** The Shape button cycles through these, starting from plain (the default). */
+export const PHOTO_SHAPES: PhotoShape[] = ['plain', 'rounded', 'circle', 'heart'];
+
+/** A picture placed on the board: dragged, resized and twisted like text and stamps. */
+export type PhotoItem = {
+  t: 'photo';
+  id: string;
+  /** Local file:// while drawing; a storage path once sent. */
+  path: string;
+  x: number;
+  y: number;
+  /** Width as a fraction of the board width. */
+  size: number;
+  /** width / height of the picture. */
+  aspect: number;
+  rot: number;
+  seed: number;
+  /** Default 'plain': the photo as it is, square corners. */
+  shape?: PhotoShape;
+  /** Thin white edge, like a print. Default off. */
+  border?: boolean;
+};
+
+export type PlacedItem = TextItem | StampItem | PhotoItem;
 export type Item = Stroke | PlacedItem;
 
 export type FrameId = 'wood' | 'darkwood' | 'white' | 'metal' | 'pink' | 'none';

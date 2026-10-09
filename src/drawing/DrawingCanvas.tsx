@@ -13,6 +13,8 @@ import { Icon } from '@/components/ui';
 import { colors } from '@/lib/theme';
 
 import { compactPoints, randomSeed, uid, type BrushId, type Doc, type PlacedItem, type Stroke } from './model';
+import { twoFingerPose, type Pt } from './itemGesture';
+import { photoHalfSize } from './layers';
 import { drawDoc, hitTest, measureText, renderItemsLayer, type RenderEnv } from './render';
 import type { DrawingDocApi } from './useDrawingDoc';
 import {
@@ -33,7 +35,6 @@ import {
 } from './viewport';
 
 export type Tool = {
-  mode: 'draw' | 'move';
   brush: BrushId;
   color: string;
   size: number;
@@ -45,19 +46,24 @@ type Props = {
   tool: Tool;
   width: number;
   selectedId: string | null;
+  /** Tapping a picture/text selects it; tapping it again or anywhere else lets go (null). */
   onSelect: (id: string | null) => void;
-  onEditItem?: (id: string) => void;
 };
 
-type Drag = { id: string; start: PlacedItem; cur: PlacedItem; active: number };
+/** `frozen`: a two-finger gesture took over, so the one-finger drag stops moving it. */
+type Drag = { id: string; start: PlacedItem; cur: PlacedItem; active: number; frozen?: boolean };
+/** Two fingers on a picture or text: which item, its pose then, and where those fingers started. */
+type ItemTwist = { start: PlacedItem; ids: [number, number]; a0: Pt; b0: Pt };
 type Session = { t: TwoFinger; active: number; lastFocal: { x: number; y: number } };
 /** One-finger panning that can re-anchor after a two-finger gesture hands back control. */
 type OnePan = { start: ViewT; baseX: number; baseY: number; rebase: boolean };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const MIN_FLING = 150; // px/s
+/** Gesture callbacks run on touch, not during render; kept out here so the compiler sees that. */
+const clock = () => Date.now();
 
-export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, onEditItem }: Props) {
+export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect }: Props) {
   const { doc } = api;
   const h = w / doc.aspect;
   const pixelRatio = PixelRatio.get();
@@ -81,7 +87,7 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
     setView(IDENTITY);
   }
   const zoomed = isZoomed(view);
-  const panning = handPan && zoomed && tool.mode === 'draw';
+  const panning = handPan && zoomed;
 
   const commitView = (v: ViewT) => {
     viewRef.current = clampView(v, w, h);
@@ -150,7 +156,8 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
   };
 
   // Gesture objects are rebuilt on every render (each frame), so per-gesture state lives in refs.
-  const pinchState = useRef({ started: false, claimedByItem: false });
+  const pinchState = useRef({ started: false });
+  const twist = useRef<ItemTwist | null>(null);
   const pan2State = useRef({ started: false });
 
   // True centroid of all fingers, from raw touch points. (Android's pan reports the leading
@@ -169,13 +176,55 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
   const trackTouches = (e: GestureTouchEvent) => {
     const had = touches.current.size;
     touches.current = new Map(e.allTouches.map((t) => [t.id, { x: t.x, y: t.y }]));
-    if (had < 2 && touches.current.size >= 2 && !session.current) downCentroid.current = centroid(0, 0);
-    if (touches.current.size < 2) downCentroid.current = null;
+    if (had < 2 && touches.current.size >= 2 && !session.current) {
+      downCentroid.current = centroid(0, 0);
+      startTwist();
+    }
+    if (touches.current.size < 2) {
+      downCentroid.current = null;
+      endTwist();
+    } else updateTwist();
   };
   const releaseTouches = (e: GestureTouchEvent) => {
     for (const t of e.changedTouches) touches.current.delete(t.id);
-    if (touches.current.size < 2) downCentroid.current = null;
+    if (touches.current.size < 2) {
+      downCentroid.current = null;
+      endTwist();
+    }
   };
+
+  // ---- two fingers while a picture/text is selected: it follows them (resize, rotate, move) ----
+  // With nothing selected, two fingers zoom and pan the board instead.
+  function startTwist() {
+    const [[ia, a], [ib, b]] = [...touches.current.entries()];
+    const id = drag.current?.id ?? selectedId;
+    if (!id) return;
+    cancelStroke();
+    if (!beginDrag(id)) return;
+    const d = drag.current!;
+    d.frozen = true;
+    twist.current = { start: { ...d.cur }, ids: [ia, ib], a0: a, b0: b };
+  }
+  function updateTwist() {
+    const g = twist.current;
+    const d = drag.current;
+    const a = g && touches.current.get(g.ids[0]);
+    const b = g && touches.current.get(g.ids[1]);
+    if (!g || !d || !a || !b) return;
+    const pose = twoFingerPose(g.start, g.a0, g.b0, a, b, viewRef.current.s * w, {
+      maxX: 1,
+      maxY: h / w,
+      minSize: 0.02,
+      maxSize: d.cur.t === 'photo' ? 1.5 : 1.2,
+    });
+    Object.assign(d.cur, pose);
+    redraw();
+  }
+  function endTwist() {
+    if (!twist.current) return;
+    twist.current = null;
+    endDrag();
+  }
   /**
    * Point the session's translation at the current finger centroid. Once a finger lifts
    * (people rarely release both at once) the transform freezes instead of jumping.
@@ -188,28 +237,19 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
     s.lastFocal = c;
   };
 
-  /** Pinch that zooms the board (unless `itemFirst` claims it for the selected item). */
-  const viewPinch = (itemFirst: boolean) => {
+  /** Pinch that zooms the board (unless two fingers have hold of an item). */
+  const viewPinch = () => {
     const st = pinchState.current;
     return Gesture.Pinch()
       .runOnJS(true)
       .onStart((e) => {
         cancelStroke();
-        st.claimedByItem = itemFirst && beginDrag(drag.current?.id ?? selectedId);
-        if (st.claimedByItem) return;
+        if (twist.current) return;
         st.started = true;
         const c = downCentroid.current ?? centroid(e.focalX, e.focalY);
         beginSession(c.x, c.y);
       })
       .onUpdate((e) => {
-        if (st.claimedByItem) {
-          const d = drag.current;
-          if (d) {
-            d.cur.size = clamp(d.start.size * e.scale, 0.02, 1.2);
-            redraw();
-          }
-          return;
-        }
         const s = session.current;
         if (!st.started || !s) return;
         s.t.scale = e.scale;
@@ -217,10 +257,6 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
         applySession();
       })
       .onFinalize(() => {
-        if (st.claimedByItem) {
-          st.claimedByItem = false;
-          endDrag();
-        }
         if (st.started) {
           st.started = false;
           endSession();
@@ -241,7 +277,7 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
       .onTouchesCancelled(releaseTouches)
       .onStart((e) => {
         cancelStroke();
-        if (drag.current) return; // fingers are on an item being moved
+        if (drag.current || twist.current) return; // fingers are on an item
         const c = downCentroid.current ?? centroid(e.x, e.y);
         beginSession(c.x, c.y); // joins a pinch's session if one is already running
         st.started = true;
@@ -298,7 +334,7 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
   const itemsImage = useMemo(
     () => renderItemsLayer(doc, w, cacheScale, env, draggingId ? new Set([draggingId]) : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [doc.items, doc.board, doc.style, doc.aspect, w, cacheScale, env.typeface, draggingId],
+    [doc.items, doc.board, doc.style, doc.aspect, w, cacheScale, env.typeface, env.images, draggingId],
   );
 
   const picture = useMemo(
@@ -311,14 +347,17 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
           c.scale(v.s, v.s);
           drawDoc(c, doc, w, env, { itemsImage, live: drag.current?.cur ?? live.current });
           const sel = drag.current?.cur ?? doc.items.find((i) => i.id === selectedId);
-          if (tool.mode === 'move' && sel && sel.t !== 'stroke') drawSelection(c, sel, w, env, v.s);
+          if (sel && sel.t !== 'stroke') drawSelection(c, sel, w, env, v.s);
+          // Erasing: show how big the eraser is, under the finger.
+          const l = live.current;
+          if (l?.brush === 'eraser' && l.pts.length >= 2) drawReticle(c, l.pts[l.pts.length - 2] * w, l.pts[l.pts.length - 1] * w, (l.size * w) / 2, v.s);
           c.restore();
           if (isZoomed(v)) drawScrollIndicators(c, v, w, h);
         },
         { width: w, height: h },
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itemsImage, tick, doc, env, w, h, selectedId, tool.mode, view],
+    [itemsImage, tick, doc, env, w, h, selectedId, view],
   );
 
   /** Screen point (inside the canvas view) → normalized doc coordinates. */
@@ -327,8 +366,9 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
     return [clamp(p.x, 0, w) / w, clamp(p.y, 0, h) / w] as const;
   };
 
-  // ---- draw mode -------------------------------------------------------------
-  // One finger draws. A second finger cancels the stroke and two-finger gestures take over.
+  // ---- one finger -------------------------------------------------------------
+  // Draws, except: on the selected item it drags that item, and a quick tap selects a
+  // picture/text (or lets go of the selected one) instead of leaving a dot.
   function cancelStroke() {
     if (live.current) {
       live.current = null;
@@ -336,16 +376,27 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
     }
   }
 
+  /** The current one-finger press: where/when it started, and whether it's a tap so far. */
+  const press = useRef<{ x: number; y: number; at: number; moved: boolean; multi: boolean; onItem: boolean } | null>(null);
+  const TAP_SLOP = 10; // px
+  const TAP_MS = 350;
+
   const drawPan = Gesture.Pan()
     .runOnJS(true)
     .minDistance(0)
     .onTouchesDown((e) => {
       cancelFling();
-      if (e.numberOfTouches > 1) cancelStroke();
+      if (e.numberOfTouches > 1) {
+        cancelStroke();
+        if (press.current) press.current.multi = true;
+      }
     })
     .onBegin((e) => {
       if (session.current) return;
       const [x, y] = toDoc(e.x, e.y);
+      const onItem = !!selectedId && hitTest(doc, x, y, w, env.typeface) === selectedId && beginDrag(selectedId);
+      press.current = { x: e.x, y: e.y, at: clock(), moved: false, multi: false, onItem };
+      if (onItem) return;
       live.current = {
         t: 'stroke',
         id: uid(),
@@ -358,15 +409,40 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
       redraw();
     })
     .onUpdate((e) => {
+      const p = press.current;
+      if (p && !p.moved && Math.hypot(e.x - p.x, e.y - p.y) > TAP_SLOP) p.moved = true;
+      if (p?.onItem) {
+        const d = drag.current;
+        if (!d || d.frozen || session.current) return; // two fingers took over: don't jump back
+        const sc = viewRef.current.s;
+        d.cur.x = clamp(d.start.x + e.translationX / sc / w, 0, 1);
+        d.cur.y = clamp(d.start.y + e.translationY / sc / w, 0, h / w);
+        redraw();
+        return;
+      }
       if (!live.current || e.numberOfPointers > 1) return;
       const [x, y] = toDoc(e.x, e.y);
       live.current.pts.push(x, y);
       redraw();
     })
     .onFinalize(() => {
+      const p = press.current;
       const s = live.current;
+      press.current = null;
       live.current = null;
-      if (s) api.add({ ...s, pts: compactPoints(s.pts) });
+      const tap = !!p && !p.moved && !p.multi && clock() - p.at < TAP_MS;
+      if (p?.onItem) {
+        endDrag();
+        if (tap) onSelect(null); // tapped the selected item again: done with it
+      } else if (tap && p) {
+        const [x, y] = toDoc(p.x, p.y);
+        const hit = hitTest(doc, x, y, w, env.typeface);
+        if (hit) {
+          onSelect(hit);
+          Haptics.selectionAsync().catch(() => {});
+        } else if (selectedId) onSelect(null); // tapped away: done, and no stray dot
+        else if (s) api.add({ ...s, pts: compactPoints(s.pts) });
+      } else if (s) api.add({ ...s, pts: compactPoints(s.pts) });
       redraw();
     });
 
@@ -381,7 +457,7 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
       onePan.current = null;
     });
 
-  // ---- move mode (drag / pinch / rotate text & stamps; pan/zoom the board otherwise) ----
+  // ---- dragging a selected item (one finger on it, or two fingers anywhere) ----
   function beginDrag(id: string | null) {
     if (!id) return false;
     if (drag.current) {
@@ -409,60 +485,7 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
     redraw();
   }
 
-  const movePan = Gesture.Pan()
-    .runOnJS(true)
-    .minDistance(0)
-    .onTouchesDown(() => cancelFling())
-    .onBegin((e) => {
-      const [x, y] = toDoc(e.x, e.y);
-      const hit = hitTest(doc, x, y, w, env.typeface);
-      if (hit !== selectedId) {
-        onSelect(hit);
-        if (hit) Haptics.selectionAsync().catch(() => {});
-      }
-      if (!beginDrag(hit)) onePanStart(); // empty space: pan the board
-    })
-    .onUpdate((e) => {
-      const d = drag.current;
-      if (d && !session.current) {
-        const s = viewRef.current.s;
-        d.cur.x = clamp(d.start.x + e.translationX / s / w, 0, 1);
-        d.cur.y = clamp(d.start.y + e.translationY / s / w, 0, h / w);
-        redraw();
-      } else onePanUpdate(e.translationX, e.translationY, e.numberOfPointers);
-    })
-    .onEnd((e) => onePanEnd(e.velocityX, e.velocityY))
-    .onFinalize(() => {
-      onePan.current = null;
-      endDrag();
-    });
-
-  const rotate = Gesture.Rotation()
-    .runOnJS(true)
-    .onStart(() => beginDrag(drag.current?.id ?? selectedId))
-    .onUpdate((e) => {
-      const d = drag.current;
-      if (!d) return;
-      d.cur.rot = d.start.rot + (e.rotation * 180) / Math.PI;
-      redraw();
-    })
-    .onFinalize(() => {
-      if (drag.current) endDrag();
-    });
-
-  const doubleTap = Gesture.Tap()
-    .runOnJS(true)
-    .numberOfTaps(2)
-    .onEnd((e) => {
-      const [x, y] = toDoc(e.x, e.y);
-      const hit = hitTest(doc, x, y, w, env.typeface);
-      if (hit && onEditItem) onEditItem(hit);
-    });
-
-  const gesture =
-    tool.mode === 'move'
-      ? Gesture.Simultaneous(movePan, viewPinch(true), viewPan2(), rotate, doubleTap)
-      : Gesture.Simultaneous(panning ? handGesture : drawPan, viewPinch(false), viewPan2());
+  const gesture = Gesture.Simultaneous(panning ? handGesture : drawPan, viewPinch(), viewPan2());
 
   const zoomPct = Math.round(view.s * 100);
 
@@ -478,16 +501,14 @@ export function DrawingCanvas({ api, env, tool, width: w, selectedId, onSelect, 
       {/* Zoom controls only while zoomed in; pinch is how you get there. */}
       {zoomed ? (
         <View style={styles.zoom} pointerEvents="box-none">
-          {tool.mode === 'draw' ? (
-            <Pressable
-              onPress={() => setHandPan((p) => !p)}
-              style={[styles.zoomBtn, panning && styles.handActive]}
-              accessibilityLabel={panning ? 'Stop panning, draw again' : 'Pan with one finger'}
-              accessibilityState={{ selected: panning }}
-            >
-              <Icon name="pan_tool" size={16} color={panning ? colors.onAccent : '#FFFFFF'} />
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={() => setHandPan((p) => !p)}
+            style={[styles.zoomBtn, panning && styles.handActive]}
+            accessibilityLabel={panning ? 'Stop panning, draw again' : 'Pan with one finger'}
+            accessibilityState={{ selected: panning }}
+          >
+            <Icon name="pan_tool" size={16} color={panning ? colors.onAccent : '#FFFFFF'} />
+          </Pressable>
           <Pressable onPress={() => zoomBy(1 / 1.5)} style={styles.zoomBtn} accessibilityLabel="Zoom out">
             <Icon name="remove" size={18} color="#FFFFFF" />
           </Pressable>
@@ -531,6 +552,19 @@ function drawScrollIndicators(c: SkCanvas, v: ViewT, w: number, h: number) {
   c.drawRRect(Skia.RRectXY(Skia.XYWHRect(w - m - t, m + f.y * trackH, t, Math.max(16, f.h * trackH)), 2, 2), p);
 }
 
+/** Eraser outline: white over dark, so it shows on light and dark boards alike. */
+function drawReticle(c: SkCanvas, x: number, y: number, r: number, zoom: number) {
+  const p = Skia.Paint();
+  p.setAntiAlias(true);
+  p.setStyle(PaintStyle.Stroke);
+  p.setStrokeWidth(3 / zoom);
+  p.setColor(Skia.Color('#00000066'));
+  c.drawCircle(x, y, r, p);
+  p.setStrokeWidth(1.5 / zoom);
+  p.setColor(Skia.Color('#FFFFFFE6'));
+  c.drawCircle(x, y, r, p);
+}
+
 function drawSelection(c: SkCanvas, item: PlacedItem, w: number, env: RenderEnv, zoom: number) {
   let hw: number;
   let hh: number;
@@ -538,6 +572,10 @@ function drawSelection(c: SkCanvas, item: PlacedItem, w: number, env: RenderEnv,
     const m = measureText(item, w, env.typeface);
     hw = m.width / 2 + 8;
     hh = m.height / 2 + 6;
+  } else if (item.t === 'photo') {
+    const half = photoHalfSize(item);
+    hw = half.hw * w + 6;
+    hh = half.hh * w + 6;
   } else {
     hw = hh = (item.size * w) / 2 + 6;
   }
