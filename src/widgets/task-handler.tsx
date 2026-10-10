@@ -13,6 +13,13 @@ import { NudgeSentWidget, renderWidgetFor } from './widgets';
 /** How long "Sent" shows after a tap on the Miss you widget; taps meanwhile are ignored. */
 const NUDGE_COOLDOWN_MS = 1000;
 
+/**
+ * Latest update started per widget. Dragging a resize handle fires an update per cell crossed, and
+ * each waits on the network, so they can finish out of order: only the newest may draw.
+ */
+const latest = new Map<number, number>();
+let updates = 0;
+
 /** Runs headless whenever Android asks a widget to update, or the user taps one. */
 export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction, clickActionData, renderWidget }: WidgetTaskHandlerProps) {
   const name = widgetInfo.widgetName as WidgetName;
@@ -21,7 +28,10 @@ export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction,
     case 'WIDGET_ADDED':
     case 'WIDGET_UPDATE':
     case 'WIDGET_RESIZED': {
+      const update = ++updates;
+      latest.set(widgetInfo.widgetId, update);
       const payload = await loadWidget(name, widgetInfo.widgetId);
+      if (latest.get(widgetInfo.widgetId) !== update) break;
       renderWidget(renderWidgetFor(name, payload, widgetInfo));
       break;
     }
@@ -40,7 +50,7 @@ export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction,
         if (Date.now() - last < NUDGE_COOLDOWN_MS) break;
         await AsyncStorage.setItem(key, String(Date.now())).catch(() => {});
 
-        renderWidget(<NudgeSentWidget kind={kind} />);
+        renderWidget(<NudgeSentWidget kind={kind} info={widgetInfo} />);
         const [ok] = await Promise.all([
           sendNudge(spaceId, kind).then(
             () => true,
@@ -49,7 +59,7 @@ export async function widgetTaskHandler({ widgetInfo, widgetAction, clickAction,
           new Promise((r) => setTimeout(r, NUDGE_COOLDOWN_MS)),
         ]);
         if (!ok) {
-          renderWidget(<NudgeSentWidget kind={kind} failed />);
+          renderWidget(<NudgeSentWidget kind={kind} failed info={widgetInfo} />);
           await new Promise((r) => setTimeout(r, NUDGE_COOLDOWN_MS));
         }
         renderWidget(renderWidgetFor('MissYou', await loadWidget('MissYou', widgetInfo.widgetId), widgetInfo));

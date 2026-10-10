@@ -1,6 +1,6 @@
 import { BOARDS, type BoardId } from '@/drawing/model';
 import { SHOW_QUESTIONS } from '@/lib/features';
-import { NUDGES, nudgeInfo } from '@/lib/nudges';
+import { NUDGES } from '@/lib/nudges';
 import { formatDistance, plural, timeAgo } from '@/lib/util';
 
 import {
@@ -102,9 +102,10 @@ function mood({ people }: MoodData): Card {
 function missYou(data: MissYouData, spaceId: string): Card {
   // iOS widgets can't make network calls on tap, so the app sends it (src/app/nudge.tsx).
   const send = (kind: string) => `${SCHEME}nudge?space=${spaceId}&kind=${kind}`;
-  const today = data.todayByKind?.length
-    ? `${data.lastFrom ?? 'They'} today: ${data.todayByKind.map((x) => `${nudgeInfo(x.kind).emoji}${x.n > 1 ? `×${x.n}` : ''}`).join(' ')}`
-    : null;
+  // Today's nudges each way, same as the Android widget's footer.
+  const them = data.fromThemToday;
+  const me = data.fromMeToday ?? 0;
+  const today = them || me ? `${data.names} sent ${them} · You sent ${me} today` : null;
   return {
     // Small widgets have one tap target: "miss you". Medium ones get a button per nudge.
     url: send('miss_you'),

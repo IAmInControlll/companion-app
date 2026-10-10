@@ -48,6 +48,7 @@ export type MoodData = { people: (Person & { emoji: string | null; text: string 
 export type MissYouData = {
   names: string;
   fromThemToday: number;
+  fromMeToday: number;
   lastFrom: string | null;
   lastAt: string | null;
   /** Today's nudges from the others, per kind, most common first. */
@@ -104,7 +105,8 @@ async function loaders(name: WidgetName, space: SpaceWithMembers, me: string) {
     case 'MissYou': {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
-      const nudges = (await recentNudges(space.id, since.toISOString())).filter((n) => n.sender_id !== me);
+      const today = await recentNudges(space.id, since.toISOString());
+      const nudges = today.filter((n) => n.sender_id !== me);
       const last = nudges[0];
       const todayByKind = NUDGES.map((x) => ({ kind: x.kind, n: nudges.filter((n) => n.kind === x.kind).length }))
         .filter((x) => x.n > 0)
@@ -112,6 +114,7 @@ async function loaders(name: WidgetName, space: SpaceWithMembers, me: string) {
       return {
         names: others.length === 1 ? others[0].profile.display_name : space.name,
         fromThemToday: nudges.length,
+        fromMeToday: today.length - nudges.length,
         lastFrom: last ? (space.members.find((m) => m.user_id === last.sender_id)?.profile.display_name ?? null) : null,
         lastAt: last?.created_at ?? null,
         todayByKind,
