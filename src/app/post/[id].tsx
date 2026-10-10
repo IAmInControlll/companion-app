@@ -2,22 +2,21 @@ import type { SkImage } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { postBackground } from '@/components/BoardStage';
-import { Avatar, Body, Button, H2, Header, IconButton, Loading, Row, Screen, useToast } from '@/components/ui';
+import { Avatar, Body, Button, Caption, H2, Header, Icon, IconButton, Input, Loading, Row, Screen, useToast } from '@/components/ui';
 import { DocView } from '@/drawing/DrawingCanvas';
 import { useHandTypeface } from '@/drawing/fonts';
 import type { Doc } from '@/drawing/model';
 import { loadPhotoImages } from '@/drawing/photos';
 import { getPost, react, unreact, type PostWithReactions } from '@/lib/api';
 import { loadJson, loadSkImage, signedUrl } from '@/lib/media';
+import { DEFAULT_REACTIONS, QUICK_COUNT, firstEmoji, quickReactions, rememberReaction } from '@/lib/reactions';
 import { useSession } from '@/lib/session';
 import { GUTTER, colors, radius, type } from '@/lib/theme';
 import { formatWhen } from '@/lib/util';
 import { goBack } from '@/lib/nav';
-
-const REACTIONS = ['❤️', '😍', '😂', '🥺', '🔥', '👏'];
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,6 +31,12 @@ export default function PostScreen() {
   const [images, setImages] = useState<Record<string, SkImage>>({});
   const [progress, setProgress] = useState<number | null>(null);
   const raf = useRef<number | null>(null);
+  const [quick, setQuick] = useState(DEFAULT_REACTIONS);
+  const [picking, setPicking] = useState(false);
+
+  useEffect(() => {
+    quickReactions().then(setQuick);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +107,19 @@ export default function PostScreen() {
     }
   };
 
+  // Any emoji from the keyboard. It joins the front of your quick row for next time.
+  const pickCustom = (text: string) => {
+    const emoji = firstEmoji(text);
+    if (!emoji) return;
+    setPicking(false);
+    Keyboard.dismiss();
+    rememberReaction(emoji).then(setQuick);
+    if (myReaction !== emoji) toggleReaction(emoji);
+  };
+
+  // A custom reaction you already picked stays visible (and selected) in the row.
+  const row = myReaction && !quick.includes(myReaction) ? [myReaction, ...quick.slice(0, QUICK_COUNT - 1)] : quick;
+
   const reactionSummary = post.reactions
     .filter((r) => r.user_id !== userId)
     .map((r) => `${space?.members.find((m) => m.user_id === r.user_id)?.profile.display_name ?? 'Someone'} ${r.emoji}`)
@@ -134,7 +152,7 @@ export default function PostScreen() {
         reactionSummary ? <Text style={[type.body, { color: colors.textDim }]}>{reactionSummary}</Text> : null
       ) : (
         <View style={styles.reactions} accessibilityRole="radiogroup" accessibilityLabel="React">
-          {REACTIONS.map((e) => {
+          {row.map((e) => {
             const on = myReaction === e;
             return (
               <Pressable
@@ -149,8 +167,31 @@ export default function PostScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={() => setPicking((p) => !p)}
+            accessibilityRole="button"
+            accessibilityLabel="React with any emoji"
+            style={[styles.reaction, picking && { backgroundColor: colors.accentSoft }]}
+          >
+            <Icon name="add_reaction" size={24} color={colors.textDim} />
+          </Pressable>
         </View>
       )}
+      {picking && !mine ? (
+        <View style={{ gap: 6 }}>
+          <Input
+            autoFocus
+            placeholder="Type or pick any emoji"
+            onChangeText={pickCustom}
+            onBlur={() => setPicking(false)}
+            autoCorrect={false}
+            autoCapitalize="none"
+            maxLength={32}
+            style={{ textAlign: 'center', fontSize: 22 }}
+          />
+          <Caption style={{ textAlign: 'center' }}>Switch your keyboard to emoji, then tap one</Caption>
+        </View>
+      ) : null}
 
       {/* Same actions whoever drew it (and wherever you came from): replay, then reply / draw on it. */}
       {doc ? (
