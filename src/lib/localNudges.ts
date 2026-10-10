@@ -30,7 +30,11 @@ export async function presentNudge(data: Record<string, unknown> | undefined): P
   const shown = (await Notifications.getPresentedNotificationsAsync()).find((n) => n.request.identifier === id);
   const count = shown ? (Number(shown.request.content.data?.count) || 1) + 1 : 1;
   const title = nudgeNotice(String(data.sender_name || 'Someone'), kind, count);
-  // Same identifier replaces the one in the tray.
-  await Notifications.scheduleNotificationAsync({ identifier: id, content: { title, data: { count } }, trigger: { channelId: CHANNEL } });
+  // Same identifier replaces the one in the tray. type/space_id say where a tap goes (notificationTaps.ts).
+  await Notifications.scheduleNotificationAsync({
+    identifier: id,
+    content: { title, data: { count, type: 'nudge', space_id: String(data.space_id) } },
+    trigger: { channelId: CHANNEL },
+  });
   return title;
 }

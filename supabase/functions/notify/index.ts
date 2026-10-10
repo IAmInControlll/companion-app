@@ -1,6 +1,7 @@
 // Receives row changes from database triggers (see migrations/*_push_triggers.sql)
 // and fans them out as FCM messages. Every message carries a `widgets` data field so the
 // recipient's phone knows which home-screen widgets to redraw, even if the app is closed.
+// `type` (plus `space_id`/`post_id`) decides which screen a tap opens: see src/lib/notificationTaps.ts.
 //
 // Env:
 //   NOTIFY_SECRET              shared secret, must match the Vault secret `notify_secret`
@@ -141,7 +142,7 @@ async function buildMessage({ table, op, record: r, old_record: old, actor }: Pa
         r.kind === 'drawing' ? 'drew on your board ✏️' : r.kind === 'photo' ? 'drew on a photo 📷' : 'left you a note 📝';
       return {
         recipients: await membersExcept(r.space_id, r.author_id),
-        data: { type: 'post', space_id: r.space_id, widgets: 'Chalkboard,Streak' },
+        data: { type: 'post', space_id: r.space_id, post_id: r.id, widgets: 'Chalkboard,Streak' },
         notification: {
           title: `${name} ${what}`,
           body: r.kind === 'note' ? String(r.body).slice(0, 120) : 'Tap to see it',
@@ -184,7 +185,7 @@ async function buildMessage({ table, op, record: r, old_record: old, actor }: Pa
       const name = await profileName(r.user_id);
       return {
         recipients: [post.author_id],
-        data: { type: 'reaction', space_id: post.space_id, widgets: '' },
+        data: { type: 'reaction', space_id: post.space_id, post_id: r.post_id, widgets: '' },
         notification: { title: `${name} reacted ${r.emoji}`, body: `to your ${post.kind}`, tag: `reaction-${r.post_id}` },
       };
     }

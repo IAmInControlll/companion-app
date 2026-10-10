@@ -1,8 +1,8 @@
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Body, Button, H2, ToastProvider, useToast } from '@/components/ui';
 import { FONT_SOURCES } from '@/lib/fonts';
 import { useLocationSync } from '@/lib/location';
+import { listenForNotificationTaps, notificationTarget } from '@/lib/notificationTaps';
 import { listenForForegroundMessages } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
 import { colors } from '@/lib/theme';
@@ -32,7 +33,7 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { ready, userId, profile, spaces, spacesLoaded, loadFailed, onboardingOpen } = useSession();
+  const { ready, userId, profile, spaces, spacesLoaded, loadFailed, onboardingOpen, setActiveSpace } = useSession();
   const toast = useToast();
   // A missing font shouldn't brick the app: carry on (with fallbacks) if loading fails.
   const [fontsLoaded, fontError] = useFonts(FONT_SOURCES);
@@ -48,6 +49,25 @@ function RootStack() {
   }, [loading]);
 
   useEffect(() => listenForForegroundMessages((title, body) => toast(title, body)), [toast]);
+
+  // Tapping a notification opens what it's about. Only once Home and friends exist: before that
+  // (signed out, onboarding) the app stays where it is.
+  const canOpen = !loading && signedIn && hasSpace && !loadFailed;
+  const live = useRef({ spaces, setActiveSpace });
+  useEffect(() => {
+    live.current = { spaces, setActiveSpace };
+  }, [spaces, setActiveSpace]);
+  useEffect(() => {
+    if (!canOpen) return;
+    return listenForNotificationTaps((data) => {
+      const target = notificationTarget(data);
+      if (!target) return;
+      const { spaces, setActiveSpace } = live.current;
+      if (target.spaceId && spaces.some((s) => s.id === target.spaceId)) setActiveSpace(target.spaceId);
+      if (target.push) router.push(target.href);
+      else router.navigate(target.href);
+    });
+  }, [canOpen]);
 
   if (loading) return null;
   if (signedIn && loadFailed) return <Offline />;
